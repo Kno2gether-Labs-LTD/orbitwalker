@@ -20,7 +20,7 @@ OrbitWalker turns your phone and a pair of **VITURE Pro 2** XR glasses into a **
 
 VITURE's glasses stream their motion sensors, but on Android their own app only pins its built-in screens, and Samsung DeX can't be pinned at all. OrbitWalker does the head tracking on the phone and gives **any app** its own pinned screen.
 
-> **Part of the Orbit family**: open-source, local-first apps that keep your data on your own devices. One promise across all of them: *your hardware, your data, no vendor cloud in the middle.* The story of every Orbit app, today's and tomorrow's, lives at **[orbitapps.space](https://orbitapps.space)** (launching soon).
+> **Part of the Orbit family**: open-source, local-first apps that keep your data on your own devices. One promise across all of them: *your hardware, your data, no vendor cloud in the middle.* The story of every Orbit app, today's and tomorrow's, lives at **[orbitapps.space](https://orbitapps.space)**.
 
 ## In the glasses
 
@@ -80,13 +80,25 @@ The helper accepts calls only from OrbitWalker itself, and after an update it on
 | **Glasses** | VITURE Pro 2 (USB `35CA:1300/1301`). Other VITURE models are untested. |
 | **Phone** | Android 13 or newer with USB-C video out (DisplayPort Alt Mode). Tested on a Samsung Galaxy Z Fold. |
 | **Samsung** | Turn off DeX, so the glasses act as a plain external display. |
-| **VITURE SpaceWalker** | Installed from Google Play: OrbitWalker uses VITURE's own glasses libraries from it (see below). |
+| **VITURE SpaceWalker** | Not needed for the APK. Only needed if you build from source (see below). |
 
 ## Getting OrbitWalker
 
-**Builds aren't published yet.** OrbitWalker talks to the glasses through VITURE's own native libraries, which are proprietary and can't be redistributed. The next release will load them from your installed copy of VITURE SpaceWalker instead of bundling them; signed APKs will appear under [Releases](../../releases) then.
+<p align="center">
+  <a href="https://github.com/Kno2gether-Labs-LTD/orbitwalker/releases/latest/download/OrbitWalker.apk"><img alt="Download OrbitWalker APK" src="https://img.shields.io/badge/Download-OrbitWalker.apk-7df5d6?style=for-the-badge&logo=android&logoColor=white"></a>
+</p>
 
-Until then, you can build it yourself from your own copy of SpaceWalker:
+**[Download the latest APK](https://github.com/Kno2gether-Labs-LTD/orbitwalker/releases/latest/download/OrbitWalker.apk)** (Android 13+, 64-bit ARM), or see all versions under [Releases](https://github.com/Kno2gether-Labs-LTD/orbitwalker/releases).
+
+1. Open the downloaded file on your phone and allow your browser or Files app to install it.
+2. Open OrbitWalker and follow **Set up**: it walks you through Developer options, pairing and (on Samsung) Auto Blocker.
+3. Plug in your glasses.
+
+Every release is signed with the same key, so updates install over the previous version. The SHA-256 checksum of each APK is listed on its release page.
+
+### Build it yourself
+
+The source here doesn't include VITURE's libraries. To build from source, take them from your own copy of SpaceWalker:
 
 ```bash
 # Requirements: JDK 17+, Android SDK 35
@@ -127,7 +139,7 @@ OrbitWalker helper (shell uid) ─ virtual display per app ─▶ OpenGL ES scen
 ## Roadmap
 
 **OrbitWalker**
-- Signed releases that use VITURE's libraries from your installed SpaceWalker, so nothing proprietary is bundled.
+- Loading VITURE's libraries from your installed SpaceWalker, so the APK doesn't need to bundle them.
 - 2D → 3D conversion of ordinary video with an on-device depth model.
 - Saved layouts per task, and more glasses as the community asks for them.
 
@@ -161,4 +173,4 @@ Video guides: [youtube.com/@Kno2gether](https://www.youtube.com/@Kno2gether)
 
 [Apache-2.0](LICENSE) for OrbitWalker's own code. Third-party components are listed in [NOTICE](NOTICE).
 
-VITURE's libraries are not included and remain VITURE's property. OrbitWalker is an independent project, not affiliated with or endorsed by VITURE or Samsung. *VITURE*, *SpaceWalker*, *Samsung*, *Galaxy* and *DeX* are trademarks of their owners.
+VITURE's native libraries are not part of this source repository and remain VITURE's property; the APKs under Releases bundle them so the app can talk to the glasses. OrbitWalker is an independent project, not affiliated with or endorsed by VITURE or Samsung. *VITURE*, *SpaceWalker*, *Samsung*, *Galaxy* and *DeX* are trademarks of their owners.
