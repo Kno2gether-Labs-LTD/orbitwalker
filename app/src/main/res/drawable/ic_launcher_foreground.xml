@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OrbitWalker "Visor Orbit": the family's gradient orbit ring, worn as a visor, with a glowing planet. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.7" android:scaleY="0.7" android:translateX="19" android:translateY="19">
+        <path android:pathData="M23,50 a27,27 0 1,0 54,0 a27,27 0 1,0 -54,0" android:strokeWidth="15" android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="23" android:startY="23" android:endX="77" android:endY="77">
+                    <item android:offset="0" android:color="#FF7DF5D6"/>
+                    <item android:offset="0.5" android:color="#FF6F8CFF"/>
+                    <item android:offset="1" android:color="#FFA98BFF"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M16,44 Q16,39 21,39 H79 Q84,39 84,44 V52 Q84,61 75,61 H61 Q56,61 54,56 L52.5,52 Q50,48 47.5,52 L46,56 Q44,61 39,61 H25 Q16,61 16,52 Z" android:fillColor="#FFFFFFFF" android:strokeColor="#FF16104A" android:strokeWidth="3"/>
+        <path android:pathData="M62.5,25.5 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" android:strokeColor="#FF16104A" android:strokeWidth="3.5">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="69" android:centerY="22" android:gradientRadius="14">
+                    <item android:offset="0" android:color="#FFFFFFFF"/>
+                    <item android:offset="0.5" android:color="#FFC9FFF2"/>
+                    <item android:offset="1" android:color="#FF5FE3C4"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

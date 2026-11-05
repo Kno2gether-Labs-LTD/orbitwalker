@@ -1,0 +1,19 @@
+OrbitWalker
+Copyright 2026 Avijit Sarkar and OrbitWalker contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product uses the following third-party components:
+
+- libadb-android (https://github.com/MuntashirAkon/libadb-android)
+  used under its Apache License 2.0 option.
+- spake2-java / spake2-android (https://github.com/MuntashirAkon/spake2-java)
+  GNU Lesser General Public License v3.0, used as a separate, replaceable library.
+- Bouncy Castle (https://www.bouncycastle.org) - MIT-style Bouncy Castle Licence.
+- Shizuku API (https://github.com/RikkaApps/Shizuku-API) - Apache License 2.0.
+- AndroidHiddenApiBypass (https://github.com/LSPosed/AndroidHiddenApiBypass) - Apache License 2.0.
+- AndroidX and Jetpack Compose (https://developer.android.com/jetpack) - Apache License 2.0.
+
+VITURE's native libraries are NOT included in this repository or in any build we
+publish. They remain the property of VITURE. OrbitWalker is not affiliated with
+or endorsed by VITURE or Samsung.
