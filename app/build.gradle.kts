@@ -64,6 +64,6 @@ dependencies {
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
     // Built-in helper start: Wireless-debugging pairing + adb client (Apache-2.0 option; SPAKE2 dep is LGPL-3.0).
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
-    implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
+    implementation("org.bouncycastle:bcpkix-jdk15to18:1.86")
     testImplementation("junit:junit:4.13.2")
 }
