@@ -20,7 +20,7 @@ OrbitWalker turns your phone and a pair of **VITURE Pro 2** XR glasses into a **
 
 VITURE's glasses stream their motion sensors, but on Android their own app only pins its built-in screens, and Samsung DeX can't be pinned at all. OrbitWalker does the head tracking on the phone and gives **any app** its own pinned screen.
 
-> **Part of the Orbit family**: open-source, local-first apps that keep your data on your own devices. One promise across all of them: *your hardware, your data, no vendor cloud in the middle.*
+> **Part of the Orbit family**: open-source, local-first apps that keep your data on your own devices. One promise across all of them: *your hardware, your data, no vendor cloud in the middle.* The story of every Orbit app, today's and tomorrow's, lives at **[orbitapps.space](https://orbitapps.space)** (launching soon).
 
 ## In the glasses
 
@@ -141,7 +141,13 @@ OrbitWalker helper (shell uid) ─ virtual display per app ─▶ OpenGL ES scen
 | **Orbit Server** | One box you own, instead of a subscription per vendor. |
 | **Orbit Agents** | Your own AI on your own hardware, under rules you set. |
 
-A home for all of them, **The Orbit Apps**, is on its way, with downloads and guides for every app.
+A home for all of them is on its way at **[orbitapps.space](https://orbitapps.space)**: the story behind each app, downloads, and guides on how to use them.
+
+## Built by Kno2gether Labs
+
+OrbitWalker and the Orbit family are designed and built by **[Kno2gether Labs LTD](https://kno2gether.com)**, the team behind **[Knotie](https://knotie-ai.pro)**.
+
+We build apps like this one, websites, and **custom AI solutions** for businesses: from private, on-device AI to agents that work with your own data. If you'd like something built, get in touch at [kno2gether.com](https://kno2gether.com) or see what Knotie can do at [knotie-ai.pro](https://knotie-ai.pro).
 
 ## Contributing
 
