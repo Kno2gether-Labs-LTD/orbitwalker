@@ -1,0 +1,11 @@
+build/
+.gradle/
+local.properties
+app/src/main/jniLibs/
+.superpowers/
+*.apk
+.idea/
+
+# emulator captures and generated scripts
+scripts/emulator/*.png
+scripts/emulator/bts.json

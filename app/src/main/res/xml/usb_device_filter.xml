@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VITURE Pro 2 (VID 0x35CA, PID 0x1300 / 0x1301) -->
+    <usb-device vendor-id="13770" product-id="4864" />
+    <usb-device vendor-id="13770" product-id="4865" />
+</resources>
