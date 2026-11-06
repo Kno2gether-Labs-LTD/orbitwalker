@@ -234,7 +234,7 @@ class BrowserActivity : ComponentActivity() {
         val web = tab.web
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                handleSpecialScheme(request.url)
+                handleSpecialScheme(view, request)
 
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 tab.url = url
@@ -303,14 +303,20 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 
-    /** Non-web links (mail, phone, store, intent://) go to the right app, or are ignored. Returns true if handled. */
-    private fun handleSpecialScheme(uri: Uri): Boolean {
+    /**
+     * Non-web links (mail, phone, store, intent://) go to the right app, or are ignored. Returns true if handled.
+     * Only a click in the page itself (main frame, user gesture) may leave the web; frames and scripts can't.
+     */
+    private fun handleSpecialScheme(view: WebView, request: WebResourceRequest): Boolean {
+        val uri = request.url
         val scheme = uri.scheme?.lowercase() ?: return true
         if (scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data" || scheme == "blob") return false
+        val clicked = request.isForMainFrame && request.hasGesture()
+        if (!clicked) return true
         if (scheme == "intent") {
-            // Only follow a page's own web fallback; never launch arbitrary components from a page.
+            // Only follow a page's own web fallback, in the same tab; never launch components from a page.
             val fallback = runCatching { Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url") }.getOrNull()
-            if (fallback != null && URLUtil.isNetworkUrl(fallback)) selectedTab()?.web?.loadUrl(fallback)
+            if (fallback != null && URLUtil.isNetworkUrl(fallback)) view.loadUrl(fallback)
             return true
         }
         if (scheme in setOf("mailto", "tel", "sms", "geo", "market")) {
@@ -336,7 +342,7 @@ class BrowserActivity : ComponentActivity() {
                 .addRequestHeader("User-Agent", userAgent ?: "")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-            CookieManager.getInstance().getCookie(url)?.let { req.addRequestHeader("Cookie", it) }
+            // No cookies: the download service follows redirects, so a Cookie header could reach another site.
             getSystemService(DownloadManager::class.java).enqueue(req)
         }.onSuccess { toast("Downloading $name") }.onFailure { toast("Download failed") }
     }
