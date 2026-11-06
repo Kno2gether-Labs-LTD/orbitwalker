@@ -35,6 +35,10 @@ class RawInputController(
         fun keyTarget(): Int
         fun injectKey(displayId: Int, action: Int, keyCode: Int, meta: Int, repeat: Int, downTime: Long, eventTime: Long, scanCode: Int, deviceId: Int)
         fun onReleasedByShortcut()
+        /** Ctrl+Alt+C: bring the cursor to where the user is looking. */
+        fun onFindCursor()
+        /** Ctrl+Alt+R: recenter the view and bring the cursor to the front. */
+        fun onRecenterShortcut()
         fun onChanged()
     }
 
@@ -172,10 +176,13 @@ class RawInputController(
         meta.onKey(code, value)
         val android = LinuxKeys.toAndroid(code)
         if (android == KeyEvent.KEYCODE_UNKNOWN) return
-        // Ctrl+Esc gives the mouse and keyboard back to the phone (held keys are lifted first).
-        if (android == KeyEvent.KEYCODE_ESCAPE && value == 1 && meta.meta and KeyEvent.META_CTRL_ON != 0) {
-            sink.onReleasedByShortcut()
-            return
+        // OrbitWalker's own shortcuts: Ctrl+Esc gives the mouse and keyboard back to the phone (held keys
+        // are lifted first), Ctrl+Alt+C finds the cursor, Ctrl+Alt+R recenters. Apps never see these.
+        if (value == 1) when (GlobalShortcuts.match(android, meta.meta)) {
+            GlobalShortcut.RELEASE -> { sink.onReleasedByShortcut(); return }
+            GlobalShortcut.FIND_CURSOR -> { sink.onFindCursor(); return }
+            GlobalShortcut.RECENTER -> { sink.onRecenterShortcut(); return }
+            null -> Unit
         }
         // Volume keys keep working on the phone.
         if (android == KeyEvent.KEYCODE_VOLUME_UP || android == KeyEvent.KEYCODE_VOLUME_DOWN || android == KeyEvent.KEYCODE_VOLUME_MUTE) {

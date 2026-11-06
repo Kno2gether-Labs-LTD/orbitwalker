@@ -277,6 +277,18 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             }
         }
         override fun onReleasedByShortcut() = releaseRawInput()
+        override fun onFindCursor() {
+            val (yaw, pitch) = dev.avijit.orbit.layout.Gaze.cursorAngles(headPose(), mode)
+            screens.findCursor(yaw, pitch)
+            DiagLog.i(TAG, "shortcut: find cursor")
+        }
+        override fun onRecenterShortcut() {
+            runOnUiThread {
+                filter.recenter()
+                screens.findCursor(0f, 0f)
+                DiagLog.i(TAG, "shortcut: recenter")
+            }
+        }
         override fun onChanged() { if (!isDestroyed) state.value = buildState() }
     }
 
@@ -383,6 +395,16 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
         override fun autoBlocker() = openAutoBlocker()
         override fun eyeBreak() = showEyeCard("Eye break", "Look at something far away for 20 seconds. Blink a few times.", 20_000L)
         override fun press(down: Boolean) = if (down) screens.pointerDown() else screens.pointerUp()
+        override fun drag() = screens.pointerDrag()
+        override fun aimPlanet(name: String) {
+            val sky = dev.avijit.orbit.render.OrbitSky
+            val p = sky.PLANETS.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: return
+            val c = sky.centre(p, sky.skyTime(sky.clockS(), screens.orbitStill))
+            screens.cursor.aimAt(
+                Math.toDegrees(kotlin.math.atan2(c[0].toDouble(), -c[2].toDouble())).toFloat(),
+                Math.toDegrees(kotlin.math.asin(c[1].toDouble())).toFloat(),
+            )
+        }
         override fun showKeyboard(on: Boolean) = screens.setKeyboardVisible(on)
         override fun rawAnyBus(on: Boolean) {
             screens.gate.shell()?.let { s -> cinemaWorker.post { runCatching { s.setRawAnyBus(on) } } }
@@ -656,7 +678,7 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             focusedContent = screens.focused?.let { screens.content[it] } ?: dev.avijit.orbit.render.ContentMode.FLAT,
             pointerVisible = screens.pointerVisible,
             recentApps = screens.panels.values.mapNotNull { it.component }.toSet().let { open ->
-                screens.recentApps.filter { it !in open }.map { AppEntry(appLabel(it.substringBefore('/')), it, it.substringBefore('/')) }
+                screens.recentApps.filter { it !in open }.map { entryFor(it) }
             },
             dockEnabled = screens.dockEnabled,
             widgetsEnabled = screens.widgetsEnabled,
@@ -726,6 +748,18 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
     override fun resetLayout() = screens.resetLayout()
     override fun setLayout(p: LayoutParams) = screens.setLayout(p)
     override fun openApp(component: String) = screens.openApp(component)
+
+    /** Orbit Browser: a screen in the glasses when screens can open, otherwise on the phone. */
+    override fun openBrowser() {
+        val screensReady = screens.gate.state == HelperState.READY && !screens.mirrorOn && glassesDisplay() != null
+        if (screensReady) screens.openBrowser() else dev.avijit.orbit.browser.BrowserHub.openOnPhone(this)
+    }
+
+    private fun browserEntry() = AppEntry(dev.avijit.orbit.browser.BrowserHub.LABEL, dev.avijit.orbit.browser.BrowserHub.COMPONENT, packageName)
+
+    private fun entryFor(component: String) =
+        if (component == dev.avijit.orbit.browser.BrowserHub.COMPONENT) browserEntry()
+        else AppEntry(appLabel(component.substringBefore('/')), component, component.substringBefore('/'))
     override fun reopenLast() = screens.reopenLast()
 
     override fun helperAction() {
@@ -996,6 +1030,7 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             .filter { it.activityInfo.packageName != packageName }
             .map { AppEntry(it.loadLabel(packageManager).toString(), "${it.activityInfo.packageName}/${it.activityInfo.name}", it.activityInfo.packageName) }
             .sortedBy { it.label.lowercase() }
+            .let { listOf(browserEntry()) + it }
     }
 
     override fun shareLogs() = startActivity(DiagLog.shareIntent(this))
@@ -1018,6 +1053,7 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             .filter { "${it.activityInfo.packageName}/${it.activityInfo.name}" !in open }
             .map { AppEntry(it.loadLabel(packageManager).toString(), "${it.activityInfo.packageName}/${it.activityInfo.name}", it.activityInfo.packageName) }
             .sortedBy { it.label.lowercase() }
+            .let { listOf(browserEntry()) + it }
     }
 
     // ---------------------------------------------------------------- prefs

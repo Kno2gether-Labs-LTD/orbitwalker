@@ -24,6 +24,7 @@ object OrbitIcons {
     val Trackpad = stroke("trackpad", "M6 5h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z", "M7 15h10")
     val Layout = stroke("layout", "M4 6h10M4 12h16M4 18h7", "M17 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4z", "M14 16a2 2 0 1 1 0 4a2 2 0 1 1 0-4z")
     val Settings = stroke("settings", "M12 9a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", "M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2")
+    val Globe = stroke("globe", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z", "M3 12h18", "M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9s1.2-6.5 3.6-9z")
     val Recenter = stroke("recenter", "M12 9a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", "M12 2v3M12 19v3M2 12h3M19 12h3")
     val Pin = stroke("pin", "M12 17v5M9 3h6l-1 7 4 3H6l4-3z")
     val Follow = stroke("follow", "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z", "M12 9a3 3 0 1 1 0 6a3 3 0 1 1 0-6z")

@@ -106,6 +106,7 @@ interface OrbitActions {
     fun resetLayout()
     fun setLayout(p: LayoutParams)
     fun openApp(component: String)
+    fun openBrowser()
     fun reopenLast()
     /** Home/Settings button: Start when paired. */
     fun helperAction()

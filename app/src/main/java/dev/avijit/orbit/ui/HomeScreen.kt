@@ -74,6 +74,14 @@ fun HomeScreen(state: UiState, actions: OrbitActions, onAddApp: () -> Unit, onTa
 
         StatusLine(state.status)
 
+        SettingRow(
+            "Orbit Browser",
+            if (state.helper == HelperState.READY && !state.mirrorOn) "Opens as a screen in the glasses. Drag a tab down to give it its own screen."
+            else "A built-in browser. Opens on the phone (and in Mirror mode, in the glasses).",
+            trailing = { Icon(OrbitIcons.Globe, null, tint = Orbit.Accent, modifier = Modifier.size(22.dp)) },
+            onClick = { actions.openBrowser() },
+        )
+
         if (state.mirrorOn) {
             SettingRow("Mirroring your phone", "Your phone screen is pinned in the glasses. Turn off in Settings to open app screens.", trailing = {
                 OrbitSwitch(true) { actions.setMirror(false) }

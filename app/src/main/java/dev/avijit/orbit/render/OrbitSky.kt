@@ -21,7 +21,33 @@ object OrbitSky {
         /** Label accent (ARGB) in the app's family colour. */
         val accent: Int,
         val rings: Boolean = false,
+        /** Opened in Orbit Browser when the planet is clicked. One page per app later. */
+        val url: String = SITE_APPS,
     )
+
+    const val SITE_APPS = "https://orbitapps.space/#apps"
+
+    /** One clock for the renderer and for clicks, so a click finds the planet where it's drawn. */
+    private val startNs = System.nanoTime()
+    fun clockS(): Float = ((System.nanoTime() - startNs) / 1e9).toFloat() % 100_000f
+
+    /** The planet (or its label) along [dir] at sky time [t], or null for empty sky. */
+    fun planetAt(dir: FloatArray, t: Float): Planet? {
+        var best: Planet? = null
+        var bestAngle = Float.MAX_VALUE
+        PLANETS.forEachIndexed { i, p ->
+            val c = centre(p, t)
+            val dot = (dir[0] * c[0] + dir[1] * c[1] + dir[2] * c[2]).coerceIn(-1f, 1f)
+            val angle = kotlin.math.acos(dot)
+            val reach = maxOf(p.radius * (if (p.rings) 1.7f else 1.3f), MIN_CLICK_RAD)
+            val onLabel = dev.avijit.orbit.layout.hitTest(dir, mapOf(i to labelPose(p, t))) != null
+            if ((angle <= reach || onLabel) && angle < bestAngle) { best = p; bestAngle = angle }
+        }
+        return best
+    }
+
+    /** Small planets still get a comfortable click target (2°). */
+    private const val MIN_CLICK_RAD = 0.035f
 
     val PLANETS = listOf(
         Planet("Pass", "Passwords you own", 0.4f, 0.010f, -0.05f, 0.03f, 0.014f, 1f, 0f,

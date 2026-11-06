@@ -53,4 +53,26 @@ class OrbitSkyTest {
         val b = OrbitSky.centre(p, OrbitSky.skyTime(9999f, still = true))
         assertTrue(a.contentEquals(b))
     }
+
+    @Test fun clickingAPlanet_findsIt() {
+        val t = 250f
+        OrbitSky.PLANETS.forEach { p -> assertEquals(p.name, OrbitSky.planetAt(OrbitSky.centre(p, t), t)?.name) }
+    }
+
+    @Test fun clickingEmptySky_findsNothing() {
+        val t = 250f
+        val c = OrbitSky.centre(OrbitSky.PLANETS[0], t)
+        assertEquals(null, OrbitSky.planetAt(floatArrayOf(-c[0], -c[1], -c[2]), t))
+    }
+
+    @Test fun clickingALabel_findsItsPlanet() {
+        val p = OrbitSky.PLANETS[2]
+        val l = OrbitSky.labelPose(p, 0f)
+        val dir = dev.avijit.orbit.layout.CursorRay().apply { aimAt(l.yawDeg, l.pitchDeg) }.direction()
+        assertEquals(p.name, OrbitSky.planetAt(dir, 0f)?.name)
+    }
+
+    @Test fun everyPlanet_opensTheOrbitAppsSite() =
+        OrbitSky.PLANETS.forEach { assertTrue(it.url, it.url.startsWith("https://orbitapps.space/")) }
 }
+

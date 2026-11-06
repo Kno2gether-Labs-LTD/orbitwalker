@@ -9,6 +9,7 @@ import android.view.Surface
 import dev.avijit.orbit.diag.DiagLog
 import dev.avijit.orbit.input.ScrollAccumulator
 import dev.avijit.orbit.input.TrackpadAction
+import dev.avijit.orbit.browser.BrowserHub
 import dev.avijit.orbit.layout.CursorRay
 import dev.avijit.orbit.layout.LayoutParams
 import dev.avijit.orbit.layout.ScreenLayout
@@ -106,6 +107,8 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         }
     }
     private val launchedAt = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+    /** Worker thread: what each new browser screen should show, handed over when it launches. */
+    private val browserRequests = HashMap<Int, BrowserHub.OpenRequest>()
 
     fun start() {
         if (started) return
@@ -134,12 +137,19 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
 
     // ---------------------------------------------------------------- screens
 
-    fun openApp(component: String) {
+    fun openApp(component: String) = openOnNewSlot(component, null)
+
+    /** Opens Orbit Browser on a new screen: a page, or (with [adoptTab]) a tab moved from another screen. */
+    fun openBrowser(url: String? = null, adoptTab: Long? = null) =
+        openOnNewSlot(BrowserHub.COMPONENT, BrowserHub.OpenRequest(url, adoptTab))
+
+    private fun openOnNewSlot(component: String, browser: BrowserHub.OpenRequest?) {
         if (mirrorOn) return report("Turn off Mirror mode to open app screens", error = true)
         work {
             val open = panels.filterValues { it.component != null }.keys
             val slot = Slots.nextFree(open) ?: return@work report("All ${ScreenLayout.SLOTS} screens are in use. Close one first.", error = true)
             DiagLog.i(TAG, "open $component in slot $slot")
+            if (component == BrowserHub.COMPONENT) browserRequests[slot] = browser ?: BrowserHub.OpenRequest(null, null)
             panels = panels + (slot to PanelState(component = component))
             focusSlot(slot)
             openOnPanel(slot)
@@ -207,7 +217,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
                 if (keyboardTap()) return
                 if (dockTap()) return
                 if (barTap()) return
-                val hit = currentHit() ?: return
+                val hit = currentHit() ?: run { planetClick(); return }
                 if (focused != hit.slot) { focused = hit.slot; notifyChanged() }
                 val id = panels[hit.slot]?.displayId ?: return
                 val p = panels[hit.slot] ?: return
@@ -252,6 +262,24 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
     /** Clicks at the pointer (Bluetooth mouse or trackpad tap). */
     fun clickAtPointer() = onTrackpad(TrackpadAction.Tap)
 
+    /** A click on empty space: a planet in the Orbit sky opens its app's page in Orbit Browser. */
+    private fun planetClick(): Boolean {
+        if (background != dev.avijit.orbit.render.BackgroundMode.ORBIT || !orbitApps) return false
+        val t = dev.avijit.orbit.render.OrbitSky.skyTime(dev.avijit.orbit.render.OrbitSky.clockS(), orbitStill)
+        val planet = dev.avijit.orbit.render.OrbitSky.planetAt(cursor.direction(), t) ?: return false
+        DiagLog.i(TAG, "planet clicked: ${planet.name}")
+        report("Opening Orbit ${planet.name}")
+        openBrowser(planet.url)
+        return true
+    }
+
+    /** Brings the cursor to where the user is looking, with a ripple so it's easy to spot. */
+    fun findCursor(yawDeg: Float, pitchDeg: Float) {
+        cursor.aimAt(yawDeg, pitchDeg)
+        lastClickMs = android.os.SystemClock.uptimeMillis()
+        notifyChanged()
+    }
+
     // ---------------------------------------------------------------- mouse press / drag / release
 
     private class Press(val slot: Int, val displayId: Int, val width: Int, val height: Int, val downTime: Long, var x: Float, var y: Float)
@@ -259,6 +287,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
     private var pressOnKeyboard = false
     private var pressOnDock = false
     private var pressOnBar = false
+    private var pressOnSky = false
     private class BarDrag(val slot: Int, val startYaw: Float, val startPitch: Float, val start: SlotOffset)
     @Volatile private var barDrag: BarDrag? = null
 
@@ -267,7 +296,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         if (mirrorOn || moveMode) return
         lastClickMs = android.os.SystemClock.uptimeMillis()
         val all = activeSlots().associateWith { pose(it) }
-        val hit = hitTest(cursor.direction(), all + overlays()) ?: return
+        val hit = hitTest(cursor.direction(), all + overlays()) ?: run { pressOnSky = true; return }
         if (hit.slot == KEYBOARD_SLOT) { pressOnKeyboard = true; return }
         if (hit.slot == DOCK_SLOT) { pressOnDock = true; return }
         if (hit.slot == BAR_SLOT) {
@@ -307,6 +336,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         if (pressOnBar) { pressOnBar = false; barTap(); return }
         if (pressOnKeyboard) { pressOnKeyboard = false; keyboardTap(); return }
         if (pressOnDock) { pressOnDock = false; dockTap(); return }
+        if (pressOnSky) { pressOnSky = false; if (hitTest(cursor.direction(), activeSlots().associateWith { pose(it) } + overlays()) == null) planetClick(); return }
         val pr = press ?: return
         press = null
         if (panels[pr.slot]?.displayId != pr.displayId) return
@@ -776,6 +806,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
             imeLocal = imeLocal + (slot to (ime == 1))
             DiagLog.i(TAG, "slot $slot display $id ime=$ime (${runCatching { shell.info() }.getOrNull()})")
         }
+        if (comp == BrowserHub.COMPONENT) BrowserHub.expect(id, browserRequests.remove(slot) ?: BrowserHub.OpenRequest(null, null))
         val out = try { shell.launch(id, comp) } catch (t: Throwable) { "Error: ${t.javaClass.simpleName}: ${t.message}" }
         DiagLog.i(TAG, "am start slot $slot → ${out.replace("\n", " | ")}")
         val code = out.substringAfter("exit ", "").substringBefore('\n').trim().toIntOrNull() ?: 1
@@ -821,7 +852,8 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
 
     private fun safeError(shell: IOrbitShell) = runCatching { shell.lastError() }.getOrNull() ?: "unknown error"
 
-    private fun label(component: String) = labeler(component.substringBefore('/'))
+    private fun label(component: String) =
+        if (component == BrowserHub.COMPONENT) BrowserHub.LABEL else labeler(component.substringBefore('/'))
 
     private fun rememberScreens() {
         val list = panels.toSortedMap().values.mapNotNull { it.component }

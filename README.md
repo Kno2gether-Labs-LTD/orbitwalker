@@ -44,8 +44,14 @@ VITURE's glasses stream their motion sensors, but on Android their own app only 
 **Keyboard and mouse first**
 - **Bluetooth keyboard and mouse** drive the glasses directly: click, drag, scroll and right-click Back, with typing in every app, passwords included.
 - A **status card** shows where each device is going (glasses or phone) and why keys aren't arriving, if they aren't.
+- **A pointer you can't lose**: it stays bright away from screens, an arrow at the edge of the view points to it, **Ctrl+Alt+C** brings it to where you're looking and **Ctrl+Alt+R** recenters everything.
 - **Ctrl+Esc** hands the keyboard and mouse back to the phone.
 - An **in-glasses keyboard** and a full-screen **phone trackpad** when you're away from your desk kit.
+
+**Orbit Browser, built in**
+- A full Chromium browser (Android's System WebView) on its own screen: tabs, search, downloads, file upload, full-screen video and a Desktop-site switch.
+- **Drag a tab down out of the strip** and that page gets a screen of its own, still playing as it moves.
+- Click a planet in the Orbit sky to read about that Orbit app.
 
 **Made for long sessions**
 - **Eye care**: a reminder every 20 minutes (adjustable) to look far away, and a real-break nudge after 90 minutes. Never during a film.
