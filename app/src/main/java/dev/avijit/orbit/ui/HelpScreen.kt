@@ -94,6 +94,13 @@ fun HelpScreen(onOpenVideos: () -> Unit, onClose: () -> Unit) {
             "Want Android's own keyboard inside the screens instead? Samsung Keyboard doesn't support that; install Gboard and make it your default keyboard.",
             "A Bluetooth keyboard types into the focused screen while OrbitWalker is open on the phone.",
             "A Bluetooth mouse drives the pointer: left click clicks, right click is Back, the wheel scrolls. Esc releases it.",
+            "Lost the pointer? An arrow at the edge of the glasses points to it. Ctrl+Alt+C brings it to where you're looking; Ctrl+Alt+R recenters the view and the pointer. Ctrl+Esc gives the keyboard and mouse back to the phone.",
+        ))
+        HelpSection("Orbit Browser", listOf(
+            "Home → Orbit Browser, or pick it in Add app: a full browser on its own screen. Open as many as you like.",
+            "Drag a tab down out of the tab strip (or use the ⧉ button) to give that page a screen of its own; it keeps playing as it moves.",
+            "Ctrl+T new tab, Ctrl+W close tab, Ctrl+L address bar, Ctrl+Tab next tab, Alt+← / Alt+→ back and forward. Menu ⋮ has Desktop site and the search engine.",
+            "Click a planet in the Orbit sky to read about that Orbit app.",
         ))
         HelpSection("No helper? Mirror mode", listOf(
             "Settings → Mirror phone screen pins your phone's own screen in the glasses. Use the phone as normal.",

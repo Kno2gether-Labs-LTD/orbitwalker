@@ -29,6 +29,8 @@ class TestHarness : BroadcastReceiver() {
             "look" -> h.look(intent.getFloatExtra("yaw", 0f), intent.getFloatExtra("pitch", 0f))
             "point" -> h.point(intent.getFloatExtra("yaw", 0f), intent.getFloatExtra("pitch", 0f))
             "click" -> h.click()
+            "drag" -> h.drag()
+            "aimPlanet" -> intent.getStringExtra("name")?.let(h::aimPlanet)
             "eyebreak" -> h.eyeBreak()
             "autoblocker" -> h.autoBlocker()
             "background" -> intent.getStringExtra("mode")?.let(h::background)
@@ -62,6 +64,10 @@ class TestHarness : BroadcastReceiver() {
         fun autoBlocker()
         /** ORBIT, SPACE, LOGO or BLACK. */
         fun background(mode: String)
+        /** Points the cursor at the Orbit-sky planet called [name]. */
+        fun aimPlanet(name: String)
+        /** Pointer moved while pressed (after an aim), like dragging the mouse. */
+        fun drag()
         fun press(down: Boolean)
         fun showKeyboard(on: Boolean)
         fun rawAnyBus(on: Boolean)

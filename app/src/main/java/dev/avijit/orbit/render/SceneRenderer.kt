@@ -36,7 +36,6 @@ class SceneRenderer(
     private var logoTexture = 0
     private var logoAspect = 1.6f
     private var logoFailed = false
-    private val startNs = System.nanoTime()
     private val cardTextures = HashMap<String, Int>()
     private val cardModel = FloatArray(16)
     private val cardMvp = FloatArray(16)
@@ -168,7 +167,7 @@ class SceneRenderer(
         frameSharpen = scene.sharpen
         panels.forEach { it?.update() }
         val eyes = if (scene.stereo) STEREO_EYES else MONO_EYES
-        frameTimeS = ((System.nanoTime() - startNs) / 1e9).toFloat() % 100_000f
+        frameTimeS = OrbitSky.clockS() // shared with planet clicks
         frameNowMs = android.os.SystemClock.uptimeMillis()
         val stereo = eyes.size > 1
         if (stereo) GLES30.glEnable(GLES30.GL_SCISSOR_TEST) // keep each eye (and wide lines) in its half
@@ -177,6 +176,7 @@ class SceneRenderer(
             GLES30.glViewport(vpRect[0], vpRect[1], vpRect[2], vpRect[3])
             if (stereo) GLES30.glScissor(vpRect[0], vpRect[1], vpRect[2], vpRect[3])
             val aspect = if (eye == Eye.MONO) outW.toFloat() / outH else Stereo.eyeAspect()
+            eyeAspect = aspect
             Matrix.perspectiveM(projection, 0, VERTICAL_FOV_DEG, aspect, 0.1f, 20f)
             // Eye offset in view space (rotation-only head, so this is pure parallax).
             Matrix.setIdentityM(eyeShift, 0)
@@ -205,6 +205,9 @@ class SceneRenderer(
             .onFailure { DiagLog.e("test", "frame save failed", it) }
         bmp.recycle(); flipped.recycle()
     }
+
+    /** The current eye's width / height, for placing head-locked hints. */
+    private var eyeAspect = 16f / 9f
 
     /** Sampled once per frame so both eyes animate identically. */
     private var frameTimeS = 0f
@@ -236,7 +239,7 @@ class SceneRenderer(
         GLES30.glUseProgram(lineProgram)
         if (!drewScreen && scene.showGrid && scene.showMarkers) gridBatches.forEach { draw(it, vp) }
         if (scene.showMarkers) ringBatches.forEach { draw(it, vp) }
-        scene.cursor?.let { c -> drawPointer(c, scene) }
+        scene.cursor?.let { c -> drawPointer(c, scene); drawCursorHint(c, headView) }
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         // The green centre dot is a head-tracking test aid: only with the alignment markers.
         if (scene.showHeadDot && scene.showMarkers) headBatches.forEach { draw(it, headProj) }
@@ -405,9 +408,17 @@ class SceneRenderer(
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA) // Android bitmaps are premultiplied
-        val scale = if (scene.cursorOverScreen) 1f else 0.8f
-        modelFor(c, scale)
+        // Away from screens the pointer stays full size and gets a soft halo, so it never gets lost in space.
+        modelFor(c, if (scene.cursorOverScreen) 1f else 1.15f)
         Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
+        if (!scene.cursorOverScreen) {
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            modelFor(c, 0.75f)
+            Matrix.multiplyMM(model2, 0, vp, 0, model, 0)
+            drawLine(circle, CIRCLE_SEGMENTS, GLES30.GL_LINE_LOOP, HALO, model2)
+            modelFor(c, 1.15f)
+            GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        }
         if (scene.clickAgeMs >= 0) {
             val t = scene.clickAgeMs / dev.avijit.orbit.ScreensSession.RIPPLE_MS.toFloat()
             val ease = 1f - (1f - t) * (1f - t)
@@ -420,7 +431,7 @@ class SceneRenderer(
         }
         GLES30.glUseProgram(spriteProgram)
         GLES30.glUniformMatrix4fv(spriteMvp, 1, false, mvp, 0)
-        GLES30.glUniform1f(spriteAlpha, if (scene.cursorOverScreen) 1f else 0.7f)
+        GLES30.glUniform1f(spriteAlpha, 1f)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, cursorTexture)
         spriteQuad.position(0)
@@ -435,6 +446,34 @@ class SceneRenderer(
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
     }
+
+    /** When the cursor is out of view, an arrow at the edge of the glasses points the way to it. */
+    private fun drawCursorHint(c: ScreenPose, headView: FloatArray) {
+        val y = Math.toRadians(c.yawDeg.toDouble()); val p = Math.toRadians(c.pitchDeg.toDouble())
+        val dx = (kotlin.math.sin(y) * kotlin.math.cos(p)).toFloat()
+        val dy = kotlin.math.sin(p).toFloat()
+        val dz = (-kotlin.math.cos(y) * kotlin.math.cos(p)).toFloat()
+        val v = floatArrayOf(
+            headView[0] * dx + headView[4] * dy + headView[8] * dz,
+            headView[1] * dx + headView[5] * dy + headView[9] * dz,
+            headView[2] * dx + headView[6] * dy + headView[10] * dz,
+        )
+        val a = dev.avijit.orbit.layout.CursorHint.edgeArrow(v, VERTICAL_FOV_DEG, eyeAspect) ?: return
+        val tanV = kotlin.math.tan(Math.toRadians(VERTICAL_FOV_DEG / 2.0)).toFloat()
+        Matrix.setIdentityM(model, 0)
+        Matrix.translateM(model, 0, a.x * tanV * eyeAspect * HINT_DIST_M, a.y * tanV * HINT_DIST_M, -HINT_DIST_M)
+        Matrix.rotateM(model, 0, a.angleDeg, 0f, 0f, 1f)
+        Matrix.multiplyMM(mvp, 0, headProj, 0, model, 0)
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        drawLine(hintArrow, 3, GLES30.GL_TRIANGLES, HINT, mvp)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+    }
+
+    /** A small arrow pointing along +x, sized for [HINT_DIST_M]. */
+    private val hintArrow = floats(listOf(0.026f, 0f, 0f, -0.014f, 0.0105f, 0f, -0.014f, -0.0105f, 0f))
 
     /** Column-major model matrix: unit quad → screen of [pose], scaled by [grow]. */
     private fun modelFor(pose: ScreenPose, grow: Float) {
@@ -588,6 +627,9 @@ class SceneRenderer(
         val RIGHT_MARK = floatArrayOf(1f, 0.6f, 0.2f, 1f)
         val HEAD_DOT = floatArrayOf(0.2f, 1f, 0.4f, 1f)
         val FOCUS = floatArrayOf(0.49f, 0.61f, 1f, 1f)
+        private val HALO = floatArrayOf(0.49f, 0.96f, 0.84f, 0.85f)
+        private val HINT = floatArrayOf(0.49f, 0.96f, 0.84f, 0.8f)
+        private const val HINT_DIST_M = 1f
 
         val LINE_VS = """
             #version 300 es

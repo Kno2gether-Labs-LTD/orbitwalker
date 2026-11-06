@@ -42,6 +42,21 @@
                 android:resource="@xml/usb_device_filter" />
         </activity>
 
+        <!--
+            Orbit Browser. Exported only so the helper (shell) can start it on a glasses screen;
+            it ignores intents from other apps apart from opening its start page. Every launch
+            is its own window (one per screen).
+        -->
+        <activity
+            android:name=".browser.BrowserActivity"
+            android:exported="true"
+            android:label="Orbit Browser"
+            android:documentLaunchMode="always"
+            android:autoRemoveFromRecents="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboard|keyboardHidden|navigation"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
+
         <service
             android:name=".mirror.MirrorService"
             android:exported="false"
