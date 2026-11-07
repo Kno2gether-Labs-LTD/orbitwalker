@@ -62,6 +62,18 @@ class SceneRenderer(
     private var spriteAlpha = 0
     private var cursorTexture = 0
 
+    // Recording (GL thread): encoder targets, the camera texture and the mixed reality buffers.
+    private enum class Pass { GLASSES, REC_GLASSES, REC_MIXED }
+    private var encoders = EncoderSurfaces()
+    private var compositor: Compositor? = null
+    private var camTex: CameraTexture? = null
+    private var mrLayer: Fbo? = null
+    private var mrOut: Fbo? = null
+    private var mrFresh = false
+    private val recThrottle = dev.avijit.orbit.record.FrameThrottle(dev.avijit.orbit.record.Mp4File.FPS)
+    private val hudTextures = IntArray(2)
+    private val hudUploaded = arrayOfNulls<android.graphics.Bitmap>(2)
+
     private val projection = FloatArray(16)
     private val vp = FloatArray(16)
     private val model = FloatArray(16)
@@ -120,6 +132,8 @@ class SceneRenderer(
         space.create()
         logoTexture = 0
         cardTextures.clear() // textures died with the old context
+        encoders = EncoderSurfaces(); compositor = null; camTex = null; mrLayer = null; mrOut = null
+        hudTextures.fill(0); hudUploaded.fill(null)
         artTextures.fill(0) // keyboard + dock textures died with the old context
         artUploaded.fill(null)
         GLES30.glClearColor(0f, 0f, 0f, 1f) // black = transparent on optical see-through glasses
@@ -151,6 +165,9 @@ class SceneRenderer(
     /** GL thread: frees every panel (called before the presentation goes away). */
     fun release() {
         panels.forEachIndexed { i, p -> runCatching { p?.release() }; panels[i] = null }
+        camTex?.release(); camTex = null
+        mrLayer?.release(); mrLayer = null; mrOut?.release(); mrOut = null
+        encoders.sync(emptyList())
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -170,6 +187,8 @@ class SceneRenderer(
         frameTimeS = OrbitSky.clockS() // shared with planet clicks
         frameNowMs = android.os.SystemClock.uptimeMillis()
         val stereo = eyes.size > 1
+        val recordNow = prepareRecording(scene)
+        GLES30.glViewport(0, 0, outW, outH)
         if (stereo) GLES30.glEnable(GLES30.GL_SCISSOR_TEST) // keep each eye (and wide lines) in its half
         for (eye in eyes) {
             val vpRect = Stereo.viewport(eye, outW, outH)
@@ -189,6 +208,153 @@ class SceneRenderer(
         }
         if (stereo) GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
         captureRequest?.let { file -> captureRequest = null; capture(file) }
+        if (recordNow) writeRecording(scene, headView)
+    }
+
+    // ---------------------------------------------------------------- recording
+
+    /**
+     * Start of frame: keeps the camera texture in step with the recorder and, at 30 fps, draws the
+     * mixed reality view (for its file and the in-glasses monitor). True if this frame is recorded.
+     */
+    private fun prepareRecording(scene: SceneSnapshot): Boolean {
+        val rec = dev.avijit.orbit.record.Recorder
+        rec.lastFrameMs = frameNowMs
+        val files = rec.files
+        encoders.sync(files)
+        val feed = rec.camera
+        if (camTex?.feed !== feed) {
+            camTex?.release(); camTex = null
+            if (feed != null) camTex = runCatching { CameraTexture(feed) }.onFailure { DiagLog.e(TAG, "camera texture failed", it) }.getOrNull()
+        }
+        camTex?.update()
+        if (files.isEmpty() && !rec.monitorOn) return false
+        if (!recThrottle.take(System.nanoTime())) return false
+        val mixed = files.firstOrNull { it.view == dev.avijit.orbit.record.RecordingView.MIXED }
+        val cam = camTex
+        mrFresh = false
+        if ((mixed != null || rec.monitorOn) && cam != null) {
+            val w = mixed?.width ?: cam.spec.outW / 2
+            val h = mixed?.height ?: cam.spec.outH / 2
+            drawMixed(scene, cam, w, h, rec)
+        }
+        return files.isNotEmpty()
+    }
+
+    private fun drawMixed(scene: SceneSnapshot, cam: CameraTexture, w: Int, h: Int, rec: dev.avijit.orbit.record.Recorder) {
+        if (mrLayer?.width != w || mrLayer?.height != h) {
+            mrLayer?.release(); mrOut?.release()
+            mrLayer = Fbo(w, h, withDepth = true); mrOut = Fbo(w, h, withDepth = false)
+        }
+        val layer = mrLayer!!; val out = mrOut!!
+        val comp = compositor ?: Compositor().also { compositor = it }
+        val rig = rec.rig
+        val aspect = w.toFloat() / h
+        // 1. Your screens as the phone's camera sees them, over a transparent background (with depth).
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, layer.framebuffer)
+        GLES30.glViewport(0, 0, w, h)
+        GLES30.glClearColor(0f, 0f, 0f, 0f)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+        GLES30.glClearColor(0f, 0f, 0f, 1f)
+        val proj = dev.avijit.orbit.record.CameraRig.projection(dev.avijit.orbit.record.CameraRig.zoomed(cam.spec.vfovDeg, rig.zoom), aspect)
+        val view = dev.avijit.orbit.record.CameraRig.viewMatrix(rig)
+        System.arraycopy(proj, 0, projection, 0, 16)
+        Matrix.multiplyMM(vp, 0, projection, 0, view, 0)
+        System.arraycopy(projection, 0, headProj, 0, 16)
+        eyeAspect = aspect; currentEye = Eye.MONO
+        drawEye(scene, view, Pass.REC_MIXED)
+        // 2. Camera picture + screens, with you in front of whatever is behind you.
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, out.framebuffer)
+        GLES30.glViewport(0, 0, w, h)
+        val hasMask = comp.uploadMask(rec.mask?.latest)
+        comp.composite(cam, layer, aspect, hasMask, dev.avijit.orbit.record.CameraRig.personDepth(rig), MR_OPACITY)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        mrFresh = true
+    }
+
+    /** End of frame: the glasses view and the mixed reality view into their files. */
+    private fun writeRecording(scene: SceneSnapshot, headView: FloatArray) {
+        val now = System.nanoTime()
+        for (file in dev.avijit.orbit.record.Recorder.files) {
+            if (!encoders.begin(file)) continue
+            GLES30.glViewport(0, 0, file.width, file.height)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+            if (file.view == dev.avijit.orbit.record.RecordingView.GLASSES) {
+                val aspect = file.width.toFloat() / file.height
+                Matrix.perspectiveM(projection, 0, VERTICAL_FOV_DEG, aspect, 0.1f, 20f)
+                Matrix.multiplyMM(vp, 0, projection, 0, headView, 0)
+                System.arraycopy(projection, 0, headProj, 0, 16)
+                eyeAspect = aspect; currentEye = Eye.MONO
+                drawEye(scene, headView, Pass.REC_GLASSES)
+                val cam = camTex
+                if (dev.avijit.orbit.record.Recorder.faceBubble && cam != null && cam.hasFrame) {
+                    val size = (file.height * 0.28f).toInt(); val m = (file.height * 0.04f).toInt()
+                    GLES30.glViewport(file.width - size - m, m, size, size)
+                    (compositor ?: Compositor().also { compositor = it }).bubble(cam)
+                }
+            } else {
+                val out = mrOut
+                if (out != null && mrFresh) (compositor ?: Compositor().also { compositor = it }).copy(out.color)
+            }
+            runCatching { encoders.end(file, now) }.onFailure { DiagLog.e(TAG, "encoder frame failed", it) }
+        }
+        GLES30.glViewport(0, 0, outW, outH)
+    }
+
+    /** Glasses only: the red REC pill (top left) and, while lining up the camera, the camera monitor. */
+    private fun drawRecordingHud() {
+        val rec = dev.avijit.orbit.record.Recorder
+        rec.statusArt?.let { headLocked(it, 0, -0.43f, 0.27f, 0.035f) }
+        if (!rec.monitorOn) return
+        val out = mrOut ?: return
+        // Longest side 0.36 m at 1.5 m: landscape or portrait, it sits in the lower-right corner.
+        val aspect = out.width.toFloat() / out.height
+        val w = if (aspect >= 1f) 0.36f else 0.36f * aspect; val h = w / aspect
+        val cx = 0.52f - w / 2; val cy = -0.27f + h / 2 + 0.045f
+        Matrix.setIdentityM(cardModel, 0)
+        Matrix.translateM(cardModel, 0, cx, cy, -CARD_DISTANCE_M)
+        Matrix.scaleM(cardModel, 0, w, h, 1f)
+        Matrix.multiplyMM(cardMvp, 0, headProj, 0, cardModel, 0)
+        spriteDraw(out.color, cardMvp, texQuad, 1f)
+        rec.monitorArt?.let { art -> headLocked(art, 1, 0.16f, -0.29f, 0.36f * art.height / art.width, width = 0.36f) }
+    }
+
+    private fun headLocked(art: android.graphics.Bitmap, slot: Int, x: Float, y: Float, h: Float, width: Float = h * art.width / art.height) {
+        if (hudUploaded[slot] !== art) {
+            if (hudTextures[slot] == 0) {
+                val ids = IntArray(1); GLES30.glGenTextures(1, ids, 0); hudTextures[slot] = ids[0]
+            }
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, hudTextures[slot])
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, art, 0)
+            hudUploaded[slot] = art
+        }
+        Matrix.setIdentityM(cardModel, 0)
+        Matrix.translateM(cardModel, 0, x, y, -CARD_DISTANCE_M)
+        Matrix.scaleM(cardModel, 0, width, h, 1f)
+        Matrix.multiplyMM(cardMvp, 0, headProj, 0, cardModel, 0)
+        spriteDraw(hudTextures[slot], cardMvp, texQuadTopDown, 1f)
+    }
+
+    private fun spriteDraw(texture: Int, m: FloatArray, quad: FloatBuffer, alpha: Float) {
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glUseProgram(spriteProgram)
+        GLES30.glUniformMatrix4fv(spriteMvp, 1, false, m, 0)
+        GLES30.glUniform1f(spriteAlpha, alpha)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+        quad.position(0)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 20, quad)
+        quad.position(3)
+        GLES30.glEnableVertexAttribArray(1)
+        GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, 20, quad)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
+        GLES30.glDisableVertexAttribArray(1)
+        quad.position(0)
+        GLES30.glDisable(GLES30.GL_BLEND)
     }
 
     /** Test harness: save the next frame (exactly what the glasses show) as a PNG. */
@@ -213,8 +379,10 @@ class SceneRenderer(
     private var frameTimeS = 0f
     private var frameNowMs = 0L
 
-    private fun drawEye(scene: SceneSnapshot, headView: FloatArray) {
-        drawBackground(scene, headView) // at infinity: same for both eyes
+    private fun drawEye(scene: SceneSnapshot, headView: FloatArray, pass: Pass = Pass.GLASSES) {
+        val glasses = pass == Pass.GLASSES
+        // Mixed reality: the camera picture is the background, and nothing is locked to your head.
+        if (pass != Pass.REC_MIXED) drawBackground(scene, headView) // at infinity: same for both eyes
 
         var drewScreen = false
         for (s in scene.screens) {
@@ -234,16 +402,18 @@ class SceneRenderer(
         scene.keyboard?.let { kb -> scene.keyboardArt?.let { art -> drawKeyboard(kb, art) } }
         scene.dock?.let { d -> scene.dockArt?.let { art -> drawArtPanel(d, art, 1) } }
         scene.windowBar?.let { b -> scene.windowBarArt?.let { art -> drawArtPanel(b, art, 2) } }
-        if (scene.background == BackgroundMode.ORBIT && scene.orbitApps && scene.backgroundLevel > 0.01f) drawOrbitLabels(scene.backgroundLevel, OrbitSky.skyTime(frameTimeS, scene.orbitStill))
+        if (pass != Pass.REC_MIXED && scene.background == BackgroundMode.ORBIT && scene.orbitApps && scene.backgroundLevel > 0.01f) drawOrbitLabels(scene.backgroundLevel, OrbitSky.skyTime(frameTimeS, scene.orbitStill))
 
         GLES30.glUseProgram(lineProgram)
-        if (!drewScreen && scene.showGrid && scene.showMarkers) gridBatches.forEach { draw(it, vp) }
-        if (scene.showMarkers) ringBatches.forEach { draw(it, vp) }
-        scene.cursor?.let { c -> drawPointer(c, scene); drawCursorHint(c, headView) }
+        if (glasses && !drewScreen && scene.showGrid && scene.showMarkers) gridBatches.forEach { draw(it, vp) }
+        if (glasses && scene.showMarkers) ringBatches.forEach { draw(it, vp) }
+        scene.cursor?.let { c -> drawPointer(c, scene); if (glasses) drawCursorHint(c, headView) }
+        if (!glasses) return // recordings: no head-locked aids, notifications (private) or recording HUD
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         // The green centre dot is a head-tracking test aid: only with the alignment markers.
         if (scene.showHeadDot && scene.showMarkers) headBatches.forEach { draw(it, headProj) }
         drawNotifications()
+        drawRecordingHud()
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
     }
 
@@ -630,6 +800,8 @@ class SceneRenderer(
         private val HALO = floatArrayOf(0.49f, 0.96f, 0.84f, 0.85f)
         private val HINT = floatArrayOf(0.49f, 0.96f, 0.84f, 0.8f)
         private const val HINT_DIST_M = 1f
+        /** Screens in mixed reality: a touch see-through, like a hologram. */
+        private const val MR_OPACITY = 0.94f
 
         val LINE_VS = """
             #version 300 es

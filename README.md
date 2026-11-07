@@ -53,6 +53,11 @@ VITURE's glasses stream their motion sensors, but on Android their own app only 
 - **Drag a tab down out of the strip** and that page gets a screen of its own, still playing as it moves.
 - Click a planet in the Orbit sky to read about that Orbit app.
 
+**Record your desk, and you in it**
+- **Glasses view**: exactly what you see, 1080p with your voice.
+- **Mixed reality**: your phone on a tripod films you, and OrbitWalker draws every open screen where it floats around you, live, from the camera's point of view. Person detection (on the phone) puts you in front of the screens behind you. Any angle: behind, over a shoulder, beside or in front of you.
+- Both are saved at the same time as separate files in Movies/OrbitWalker, ready to cut together. **Ctrl+Alt+S** records; **Ctrl+Alt+M** opens a camera monitor in the glasses to line up the overlay.
+
 **Made for long sessions**
 - **Eye care**: a reminder every 20 minutes (adjustable) to look far away, and a real-break nudge after 90 minutes. Never during a film.
 - **Comfort by design**: the sky moves slower than clouds, there's a **Still sky** switch, and nothing in the scene swims with your head.

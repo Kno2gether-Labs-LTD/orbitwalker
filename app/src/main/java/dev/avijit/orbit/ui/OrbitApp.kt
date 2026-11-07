@@ -64,6 +64,7 @@ fun OrbitApp(state: UiState, actions: OrbitActions) {
     var cinemaPicker by remember { mutableStateOf(false) }
     var help by rememberSaveable { mutableStateOf(false) }
     var setup by rememberSaveable { mutableStateOf(false) }
+    var record by rememberSaveable { mutableStateOf(false) }
     var keyboard by remember { mutableStateOf(false) }
     var keysMenu by remember { mutableStateOf(false) }
     // Keys: toggles OrbitWalker's own keyboard in the glasses (works everywhere, including passwords).
@@ -77,7 +78,10 @@ fun OrbitApp(state: UiState, actions: OrbitActions) {
     BackHandler(enabled = !fullscreen && state.moveMode) { actions.setMoveMode(false) }
 
     Box(Modifier.fillMaxSize().background(Orbit.Bg)) {
-        if (setup) {
+        if (record) {
+            BackHandler { record = false }
+            RecordScreen(onClose = { record = false })
+        } else if (setup) {
             BackHandler { setup = false }
             SetupScreen(state, actions, onClose = { setup = false })
         } else if (help) {
@@ -92,7 +96,7 @@ fun OrbitApp(state: UiState, actions: OrbitActions) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 Box(Modifier.weight(1f)) {
                     when (tab) {
-                        Tab.HOME -> HomeScreen(state, actions, onAddApp = { picker = true }, onTab = { tab = it }, onCinema = { cinemaPicker = true }, onHelp = { help = true }, onSetup = { setup = true })
+                        Tab.HOME -> HomeScreen(state, actions, onAddApp = { picker = true }, onTab = { tab = it }, onCinema = { cinemaPicker = true }, onHelp = { help = true }, onSetup = { setup = true }, onRecord = { record = true })
                         Tab.TRACKPAD -> TrackpadScreen(state, actions, onKeys = onKeys, onFullscreen = { fullscreen = true })
                         Tab.LAYOUT -> LayoutScreen(state, actions)
                         Tab.SETTINGS -> SettingsScreen(state, actions, onHelp = { help = true }, onSetup = { setup = true })

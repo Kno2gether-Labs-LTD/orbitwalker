@@ -39,6 +39,13 @@ class RawInputController(
         fun onFindCursor()
         /** Ctrl+Alt+R: recenter the view and bring the cursor to the front. */
         fun onRecenterShortcut()
+        /** Ctrl+Alt+S: start or stop recording. */
+        fun onRecordShortcut()
+        /** Ctrl+Alt+M: show or hide the mixed reality camera monitor (and calibration). */
+        fun onCameraMonitorShortcut()
+        /** While the camera monitor is open, arrows etc. line up the camera instead of reaching apps. */
+        fun calibrating(): Boolean
+        fun onCalibrationKey(keyCode: Int, shift: Boolean)
         fun onChanged()
     }
 
@@ -182,7 +189,13 @@ class RawInputController(
             GlobalShortcut.RELEASE -> { sink.onReleasedByShortcut(); return }
             GlobalShortcut.FIND_CURSOR -> { sink.onFindCursor(); return }
             GlobalShortcut.RECENTER -> { sink.onRecenterShortcut(); return }
+            GlobalShortcut.RECORD -> { sink.onRecordShortcut(); return }
+            GlobalShortcut.CAMERA_MONITOR -> { sink.onCameraMonitorShortcut(); return }
             null -> Unit
+        }
+        if (value != 0 && sink.calibrating() && dev.avijit.orbit.record.CalKey.of(android) != null) {
+            sink.onCalibrationKey(android, meta.meta and KeyEvent.META_SHIFT_ON != 0)
+            return
         }
         // Volume keys keep working on the phone.
         if (android == KeyEvent.KEYCODE_VOLUME_UP || android == KeyEvent.KEYCODE_VOLUME_DOWN || android == KeyEvent.KEYCODE_VOLUME_MUTE) {

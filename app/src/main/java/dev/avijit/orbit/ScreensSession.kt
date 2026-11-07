@@ -867,6 +867,9 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         prefs.edit().putString(KEY_LAYOUT, ScreenLayout.encode(layout, offsets)).apply()
     }
 
+    /** A status line from elsewhere in the app (e.g. recording). */
+    fun notice(msg: String, error: Boolean = false) = report(msg, error)
+
     private fun report(msg: String, error: Boolean = false) {
         status = msg
         if (error) DiagLog.e(TAG, msg) else DiagLog.i(TAG, msg)

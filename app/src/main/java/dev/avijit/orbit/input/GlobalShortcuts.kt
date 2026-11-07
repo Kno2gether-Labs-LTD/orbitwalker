@@ -2,7 +2,7 @@ package dev.avijit.orbit.input
 
 import android.view.KeyEvent
 
-enum class GlobalShortcut { FIND_CURSOR, RECENTER, RELEASE }
+enum class GlobalShortcut { FIND_CURSOR, RECENTER, RELEASE, RECORD, CAMERA_MONITOR }
 
 /** Keyboard shortcuts OrbitWalker keeps for itself; every other key goes to the focused app. */
 object GlobalShortcuts {
@@ -13,6 +13,8 @@ object GlobalShortcuts {
             ctrl && keyCode == KeyEvent.KEYCODE_ESCAPE -> GlobalShortcut.RELEASE
             ctrl && alt && keyCode == KeyEvent.KEYCODE_C -> GlobalShortcut.FIND_CURSOR
             ctrl && alt && keyCode == KeyEvent.KEYCODE_R -> GlobalShortcut.RECENTER
+            ctrl && alt && keyCode == KeyEvent.KEYCODE_S -> GlobalShortcut.RECORD
+            ctrl && alt && keyCode == KeyEvent.KEYCODE_M -> GlobalShortcut.CAMERA_MONITOR
             else -> null
         }
     }

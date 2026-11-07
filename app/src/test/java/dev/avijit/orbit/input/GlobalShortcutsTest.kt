@@ -14,4 +14,6 @@ class GlobalShortcutsTest {
     @Test fun plainCopy_goesToTheApp() = assertNull(GlobalShortcuts.match(KeyEvent.KEYCODE_C, KeyEvent.META_CTRL_ON))
     @Test fun altC_goesToTheApp() = assertNull(GlobalShortcuts.match(KeyEvent.KEYCODE_C, KeyEvent.META_ALT_ON))
     @Test fun extraShift_stillMatches() = assertEquals(GlobalShortcut.FIND_CURSOR, GlobalShortcuts.match(KeyEvent.KEYCODE_C, ctrlAlt or KeyEvent.META_SHIFT_ON))
+    @Test fun ctrlAltS_startsOrStopsRecording() = assertEquals(GlobalShortcut.RECORD, GlobalShortcuts.match(KeyEvent.KEYCODE_S, ctrlAlt))
+    @Test fun ctrlAltM_togglesTheCameraMonitor() = assertEquals(GlobalShortcut.CAMERA_MONITOR, GlobalShortcuts.match(KeyEvent.KEYCODE_M, ctrlAlt))
 }
