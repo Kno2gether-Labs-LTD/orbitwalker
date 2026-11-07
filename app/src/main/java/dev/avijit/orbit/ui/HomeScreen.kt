@@ -42,7 +42,7 @@ import dev.avijit.orbit.shell.HelperState
 import dev.avijit.orbit.ui.theme.Orbit
 
 @Composable
-fun HomeScreen(state: UiState, actions: OrbitActions, onAddApp: () -> Unit, onTab: (Tab) -> Unit, onCinema: () -> Unit, onHelp: () -> Unit, onSetup: () -> Unit) {
+fun HomeScreen(state: UiState, actions: OrbitActions, onAddApp: () -> Unit, onTab: (Tab) -> Unit, onCinema: () -> Unit, onHelp: () -> Unit, onSetup: () -> Unit, onRecord: () -> Unit = {}) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -80,6 +80,12 @@ fun HomeScreen(state: UiState, actions: OrbitActions, onAddApp: () -> Unit, onTa
             else "A built-in browser. Opens on the phone (and in Mirror mode, in the glasses).",
             trailing = { Icon(OrbitIcons.Globe, null, tint = Orbit.Accent, modifier = Modifier.size(22.dp)) },
             onClick = { actions.openBrowser() },
+        )
+        SettingRow(
+            "Record",
+            "Your glasses view and a mixed reality video of you among your screens",
+            trailing = { Icon(OrbitIcons.Record, null, tint = Orbit.Accent, modifier = Modifier.size(22.dp)) },
+            onClick = onRecord,
         )
 
         if (state.mirrorOn) {

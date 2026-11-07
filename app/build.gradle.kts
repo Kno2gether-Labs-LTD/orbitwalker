@@ -11,8 +11,8 @@ android {
         applicationId = "dev.avijit.orbit"
         minSdk = 33
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.13.0"
+        versionCode = 22
+        versionName = "0.14.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     // Release signing: the key lives outside the repo (~/.gradle/gradle.properties points to it).
@@ -65,5 +65,7 @@ dependencies {
     // Built-in helper start: Wireless-debugging pairing + adb client (Apache-2.0 option; SPAKE2 dep is LGPL-3.0).
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
+    // Mixed reality recording: finds you in the camera picture, on the phone (bundled model, no network).
+    implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
     testImplementation("junit:junit:4.13.2")
 }

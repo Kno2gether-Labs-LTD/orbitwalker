@@ -144,6 +144,8 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
         ui.post(rawTick)
         ui.post(eyeTick)
         dev.avijit.orbit.diag.TestHarness.handler = harness
+        dev.avijit.orbit.record.Recorder.init(this)
+        dev.avijit.orbit.record.Recorder.onReport = { msg, error -> screens.notice(msg, error) }
         loadPrefs()
         DiagLog.i(TAG, "Orbit ${BuildConfig.VERSION_NAME} starting")
 
@@ -282,6 +284,10 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             screens.findCursor(yaw, pitch)
             DiagLog.i(TAG, "shortcut: find cursor")
         }
+        override fun onRecordShortcut() = runOnUiThread { dev.avijit.orbit.record.Recorder.toggle() }
+        override fun onCameraMonitorShortcut() = runOnUiThread { dev.avijit.orbit.record.Recorder.toggleMonitor() }
+        override fun calibrating(): Boolean = dev.avijit.orbit.record.Recorder.monitorOn
+        override fun onCalibrationKey(keyCode: Int, shift: Boolean) = dev.avijit.orbit.record.Recorder.calibrate(keyCode, shift)
         override fun onRecenterShortcut() {
             runOnUiThread {
                 filter.recenter()

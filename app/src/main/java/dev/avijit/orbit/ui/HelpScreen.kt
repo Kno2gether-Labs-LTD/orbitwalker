@@ -96,6 +96,11 @@ fun HelpScreen(onOpenVideos: () -> Unit, onClose: () -> Unit) {
             "A Bluetooth mouse drives the pointer: left click clicks, right click is Back, the wheel scrolls. Esc releases it.",
             "Lost the pointer? An arrow at the edge of the glasses points to it. Ctrl+Alt+C brings it to where you're looking; Ctrl+Alt+R recenters the view and the pointer. Ctrl+Esc gives the keyboard and mouse back to the phone.",
         ))
+        HelpSection("Record your desk (and you)", listOf(
+            "Home → Record. Glasses view saves exactly what you see; Mixed reality films you with this phone and draws every open screen where it floats around you. Both are saved as separate files in Movies/OrbitWalker, so you can cut between them.",
+            "Stand the phone on a tripod (landscape for 16:9, portrait for Shorts), pick its spot, then Ctrl+Alt+M opens the camera monitor in the glasses: arrows move the virtual camera around you, Shift+arrows aim, PgUp/PgDn distance, [ ] zoom, Enter when the screens line up.",
+            "Ctrl+Alt+S starts and stops recording. Notifications never appear in recordings; Netflix and other protected video record as black.",
+        ))
         HelpSection("Orbit Browser", listOf(
             "Home → Orbit Browser, or pick it in Add app: a full browser on its own screen. Open as many as you like.",
             "Drag a tab down out of the tab strip (or use the ⧉ button) to give that page a screen of its own; it keeps playing as it moves.",

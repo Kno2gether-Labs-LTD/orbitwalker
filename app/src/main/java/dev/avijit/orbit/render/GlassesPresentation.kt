@@ -162,7 +162,9 @@ private class MsaaConfigChooser : GLSurfaceView.EGLConfigChooser {
             javax.microedition.khronos.egl.EGL10.EGL_RENDERABLE_TYPE, 0x40, // EGL_OPENGL_ES3_BIT_KHR
         )
         val msaa = base + intArrayOf(javax.microedition.khronos.egl.EGL10.EGL_SAMPLE_BUFFERS, 1, javax.microedition.khronos.egl.EGL10.EGL_SAMPLES, 4)
-        for (attrs in listOf(msaa, base)) {
+        // Recordable first, so the same context can draw into the video encoders.
+        val recordable = intArrayOf(EGL_RECORDABLE_ANDROID, 1)
+        for (attrs in listOf(msaa + recordable, base + recordable, msaa, base)) {
             val list = attrs + javax.microedition.khronos.egl.EGL10.EGL_NONE
             val count = IntArray(1)
             if (!egl.eglChooseConfig(display, list, null, 0, count) || count[0] <= 0) continue
@@ -178,4 +180,6 @@ private class MsaaConfigChooser : GLSurfaceView.EGLConfigChooser {
         }
         throw IllegalStateException("no EGL config")
     }
+
+    private companion object { const val EGL_RECORDABLE_ANDROID = 0x3142 }
 }

@@ -38,6 +38,19 @@ class TestHarness : BroadcastReceiver() {
             "keyboard" -> h.showKeyboard(intent.getBooleanExtra("on", true))
             "rawAnyBus" -> h.rawAnyBus(intent.getBooleanExtra("on", false))
             "closeAll" -> h.closeAll()
+            // Recording (test hooks): start/stop, camera monitor, calibration keys, options.
+            "record" -> if (intent.getBooleanExtra("on", true)) dev.avijit.orbit.record.Recorder.start() else dev.avijit.orbit.record.Recorder.stop()
+            "monitor" -> dev.avijit.orbit.record.Recorder.setMonitor(intent.getBooleanExtra("on", true))
+            "calKey" -> dev.avijit.orbit.record.Recorder.calibrate(intent.getIntExtra("code", 0), intent.getBooleanExtra("shift", false))
+            "recSpot" -> intent.getStringExtra("spot")?.let { dev.avijit.orbit.record.Recorder.spot = dev.avijit.orbit.record.CameraSpot.valueOf(it) }
+            "recOpt" -> {
+                val on = intent.getBooleanExtra("on", true)
+                val r = dev.avijit.orbit.record.Recorder
+                when (intent.getStringExtra("name")) {
+                    "glasses" -> r.glassesView = on; "mixed" -> r.mixedReality = on; "mic" -> r.microphone = on
+                    "bubble" -> r.faceBubble = on; "person" -> r.personInFront = on; "wide" -> r.wideLens = on; "front" -> r.frontCamera = on
+                }
+            }
             "frame" -> h.frame()
             "reclaim" -> h.reclaim()
             "forceStereo" -> h.forceStereo(intent.getBooleanExtra("on", true))
