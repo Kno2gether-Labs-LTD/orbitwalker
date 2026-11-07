@@ -399,7 +399,8 @@ class SceneRenderer(
             }
         }
 
-        scene.keyboard?.let { kb -> scene.keyboardArt?.let { art -> drawKeyboard(kb, art) } }
+        // Never in recordings: the pressed-key highlight (and the pointer on it) would show what you type, passwords included.
+        if (glasses) scene.keyboard?.let { kb -> scene.keyboardArt?.let { art -> drawKeyboard(kb, art) } }
         scene.dock?.let { d -> scene.dockArt?.let { art -> drawArtPanel(d, art, 1) } }
         scene.windowBar?.let { b -> scene.windowBarArt?.let { art -> drawArtPanel(b, art, 2) } }
         if (pass != Pass.REC_MIXED && scene.background == BackgroundMode.ORBIT && scene.orbitApps && scene.backgroundLevel > 0.01f) drawOrbitLabels(scene.backgroundLevel, OrbitSky.skyTime(frameTimeS, scene.orbitStill))
@@ -407,7 +408,10 @@ class SceneRenderer(
         GLES30.glUseProgram(lineProgram)
         if (glasses && !drewScreen && scene.showGrid && scene.showMarkers) gridBatches.forEach { draw(it, vp) }
         if (glasses && scene.showMarkers) ringBatches.forEach { draw(it, vp) }
-        scene.cursor?.let { c -> drawPointer(c, scene); if (glasses) drawCursorHint(c, headView) }
+        scene.cursor?.let { c ->
+            if (glasses || scene.keyboard == null) drawPointer(c, scene)
+            if (glasses) drawCursorHint(c, headView)
+        }
         if (!glasses) return // recordings: no head-locked aids, notifications (private) or recording HUD
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         // The green centre dot is a head-tracking test aid: only with the alignment markers.
