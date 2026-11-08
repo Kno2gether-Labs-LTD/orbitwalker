@@ -84,9 +84,9 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
         return when (name) {
             "open_app" -> {
                 val want = args.optString("name")
-                val app = findApp(want) ?: throw ToolError("No app called \"$want\". Installed: ${host.allApps().take(40).joinToString { it.label }}")
+                val app = findApp(want) ?: throw ToolError("No app called \"$want\". Installed: ${host.allApps().take(40).joinToString { LabelText.clean(it.label) }}")
                 s.openApp(app.component)
-                "Opening ${app.label}"
+                "Opening ${LabelText.clean(app.label)}"
             }
             "open_website" -> {
                 val t = args.optString("target").trim()
@@ -94,8 +94,8 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
                 s.openBrowser(WebTarget.url(t))
                 "Opening ${WebTarget.url(t)} in Orbit Browser"
             }
-            "focus_screen" -> screen(args).let { s.focusSlot(it); "Focused ${s.labelOf(it)}" }
-            "close_screen" -> screen(args).let { val l = s.labelOf(it); s.closeScreen(it); "Closed $l" }
+            "focus_screen" -> screen(args).let { s.focusSlot(it); "Focused ${LabelText.shown(s.labelOf(it))}" }
+            "close_screen" -> screen(args).let { val l = LabelText.shown(s.labelOf(it)); s.closeScreen(it); "Closed $l" }
             "close_all_screens" -> { s.closeAll(); "Closed all screens" }
             "move_screen" -> {
                 val slot = screen(args)
@@ -109,7 +109,7 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
                     "further" -> s.adjustScreen(slot, dDistanceM = STEP_M * k)
                     else -> throw ToolError("direction must be left, right, up, down, closer or further")
                 }
-                "Moved ${s.labelOf(slot)} ${args.optString("direction")}"
+                "Moved ${LabelText.shown(s.labelOf(slot))} ${args.optString("direction")}"
             }
             "resize_screen" -> {
                 val slot = screen(args)
@@ -119,7 +119,7 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
                     "reset" -> s.adjustScreen(slot, reset = true)
                     else -> throw ToolError("change must be bigger, smaller or reset")
                 }
-                "${s.labelOf(slot)}: ${args.optString("change")}"
+                "${LabelText.shown(s.labelOf(slot))}: ${args.optString("change")}"
             }
             "reset_layout" -> { s.resetLayout(); "Layout reset" }
             "type_text" -> {
@@ -129,7 +129,7 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
                 onTyping(text)
                 s.typeText(text)
                 if (args.optBoolean("press_enter")) s.enter()
-                "Typed into ${s.focused?.let { s.labelOf(it) }}"
+                "Typed into ${LabelText.shown(s.focused?.let { s.labelOf(it) })}"
             }
             "press_key" -> {
                 if (s.focused == null) throw ToolError("No screen is focused")
@@ -167,7 +167,7 @@ class GlassesTools(private val host: GlassesHost, private val onTyping: (String)
         want.removePrefix("screen").trim().toIntOrNull()?.let { n -> if (n - 1 in open) return n - 1 }
         open.firstOrNull { s.labelOf(it)?.lowercase() == want }?.let { return it }
         open.firstOrNull { s.labelOf(it)?.lowercase()?.contains(want) == true }?.let { return it }
-        throw ToolError("No open screen matches \"$want\". Open: ${open.sorted().joinToString { "${it + 1} ${s.labelOf(it)}" }}")
+        throw ToolError("No open screen matches \"$want\". Open: ${open.sorted().joinToString { "${it + 1} ${LabelText.shown(s.labelOf(it))}" }}")
     }
 
     private fun findApp(name: String): AppEntry? = AppMatch.best(host.allApps(), name)
@@ -233,4 +233,7 @@ object LabelText {
     /** Letters, numbers, spaces, punctuation and symbols; whitespace collapsed; at most 40 characters. */
     fun clean(label: String): String =
         label.replace(Regex("[^\\p{L}\\p{N}\\p{Zs}\\p{P}\\p{S}]"), " ").replace(Regex("\\s+"), " ").trim().take(40)
+
+    /** App labels come from other apps: cleaned before any tool result carries them to the model. */
+    fun shown(label: String?) = LabelText.clean(label ?: "?")
 }
