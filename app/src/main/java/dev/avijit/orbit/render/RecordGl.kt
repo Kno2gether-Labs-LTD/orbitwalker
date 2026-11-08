@@ -118,7 +118,7 @@ internal class CameraTexture(val feed: CameraFeed) {
 }
 
 /** GL thread only. An offscreen colour (+ optional depth) target that can be sampled afterwards. */
-internal class Fbo(val width: Int, val height: Int, withDepth: Boolean) {
+internal class Fbo(val width: Int, val height: Int, withDepth: Boolean, private val mipmaps: Boolean = false) {
     val framebuffer: Int
     val color: Int
     val depth: Int
@@ -129,6 +129,10 @@ internal class Fbo(val width: Int, val height: Int, withDepth: Boolean) {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, color)
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
         linear(GLES30.GL_TEXTURE_2D)
+        if (mipmaps) {
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+            GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        }
         depth = if (withDepth) {
             GLES30.glGenTextures(1, ids, 0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
@@ -144,6 +148,13 @@ internal class Fbo(val width: Int, val height: Int, withDepth: Boolean) {
         val status = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
         if (status != GLES30.GL_FRAMEBUFFER_COMPLETE) DiagLog.e("record", "framebuffer incomplete: 0x${Integer.toHexString(status)}")
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    /** After drawing: rebuilds the blurred levels (the screens' glow is sampled from them). */
+    fun updateMipmaps() {
+        if (!mipmaps) return
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, color)
+        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
     }
 
     fun release() {
@@ -175,7 +186,7 @@ internal class Compositor {
     init {
         program = link(VS, FS)
         listOf("uCam", "uCamMatrix", "uRot", "uCrop", "uLayer", "uDepth", "uMask", "uHasMask", "uPersonDepth",
-            "uNearFar", "uOpacity", "uMode", "uHasCam").forEach { u[it] = GLES30.glGetUniformLocation(program, it) }
+            "uNearFar", "uOpacity", "uMode", "uHasCam", "uVirtual", "uGlow").forEach { u[it] = GLES30.glGetUniformLocation(program, it) }
     }
 
     fun uploadMask(m: dev.avijit.orbit.record.PersonMask.Mask?): Boolean {
@@ -214,8 +225,11 @@ internal class Compositor {
     }
 
     /** Mixed reality: camera + [layer] (screens, with depth) + person mask. Draws into the bound target. */
-    fun composite(cam: CameraTexture?, layer: Fbo, outAspect: Float, hasMask: Boolean, personDepth: Float, opacity: Float) {
+    fun composite(cam: CameraTexture?, layer: Fbo, outAspect: Float, hasMask: Boolean, personDepth: Float, opacity: Float, virtual: Boolean = false, glow: Float = 0f) {
+        layer.updateMipmaps()
         begin(MODE_COMPOSITE)
+        GLES30.glUniform1f(u["uGlow"]!!, glow)
+        GLES30.glUniform1f(u["uVirtual"]!!, if (virtual) 1f else 0f)
         bindCamera(cam, outAspect)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, layer.color)
         GLES30.glUniform1i(u["uLayer"]!!, 1)
@@ -317,6 +331,8 @@ internal class Compositor {
             uniform vec2 uNearFar;
             uniform float uOpacity;
             uniform int uMode;
+            uniform float uVirtual;
+            uniform float uGlow;
             in vec2 vUv;
             out vec4 fragColor;
 
@@ -348,11 +364,21 @@ internal class Compositor {
                 float z = texture(uDepth, vUv).r * 2.0 - 1.0;
                 float n = uNearFar.x; float fr = uNearFar.y;
                 float lin = 2.0 * n * fr / (fr + n - z * (fr - n));
-                float m = uHasMask > 0.5 ? texture(uMask, vec2(f.x, 1.0 - f.y)).r : 0.0;
+                // Only confident "that's you": half-sure patches of the room mustn't punch holes in the screens.
+                float m = uHasMask > 0.5 ? smoothstep(0.45, 0.8, texture(uMask, vec2(f.x, 1.0 - f.y)).r) : 0.0;
                 // Screens nearer the camera than you stay in front of you; the rest go behind you.
                 float screenInFront = 1.0 - smoothstep(uPersonDepth - 0.3, uPersonDepth - 0.1, lin);
+                if (uVirtual > 0.5) {
+                    // Virtual space: only you come from the camera; everything else is the scene.
+                    fragColor = vec4(mix(layer.rgb, cam, m * (1.0 - screenInFront)), 1.0);
+                    return;
+                }
                 float vis = (1.0 - m * (1.0 - screenInFront)) * uOpacity;
-                fragColor = vec4(cam * (1.0 - layer.a * vis) + layer.rgb * vis, 1.0);
+                vec3 col = cam * (1.0 - layer.a * vis) + layer.rgb * vis;
+                // The screens light up the room and you: their colours, blurred wide, spill round them.
+                vec3 spill = textureLod(uLayer, vUv, 5.0).rgb * 0.55 + textureLod(uLayer, vUv, 7.0).rgb * 0.45;
+                col += spill * uGlow * (1.0 - layer.a * vis) * (0.6 + 0.4 * m);
+                fragColor = vec4(col, 1.0);
             }
         """.trimIndent()
     }

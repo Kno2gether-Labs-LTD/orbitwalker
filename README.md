@@ -48,6 +48,17 @@ VITURE's glasses stream their motion sensors, but on Android their own app only 
 - **Ctrl+Esc** hands the keyboard and mouse back to the phone.
 - An **in-glasses keyboard** and a full-screen **phone trackpad** when you're away from your desk kit.
 
+**Orbit, your voice agent** (new in 0.18)
+- Say **"Hey Orbit"** (detected offline on the phone) or click the **mic in the dock** (Ctrl+Alt+O), then ask: "open YouTube", "put Chrome on the left and make it bigger", "start recording", "how did I sleep?".
+- It stays in the conversation: keep talking without the wake word. After 30 seconds of quiet (or "that's all") it steps back.
+- A little **Orbit** lives on your dock: it wanders and naps, pops up when you call it, and listens, thinks and talks with you.
+- Answers out loud in the voice you pick: OpenAI, ElevenLabs, Inworld or AssemblyAI voices through your server, or the phone's own voice.
+- Runs on **your own [Orbit Server](https://github.com/Kno2gether-Labs-LTD/orbit-server)**, with the AI model and voices you choose and your own keys. Pair by scanning the server's OrbitWalker QR code.
+- It knows which apps are open and where; it doesn't see what's on your screens.
+
+**Open apps from the glasses**
+- The dock's **All apps** opens your app library as a screen in the glasses: search and open any app without touching the phone.
+
 **Orbit Browser, built in**
 - A full Chromium browser (Android's System WebView) on its own screen: tabs, search, downloads, file upload, full-screen video and a Desktop-site switch.
 - **Drag a tab down out of the strip** and that page gets a screen of its own, still playing as it moves.
@@ -56,7 +67,9 @@ VITURE's glasses stream their motion sensors, but on Android their own app only 
 **Record your desk, and you in it**
 - **Glasses view**: exactly what you see, 1080p with your voice.
 - **Mixed reality**: your phone on a tripod films you, and OrbitWalker draws every open screen where it floats around you, live, from the camera's point of view. Person detection (on the phone) puts you in front of the screens behind you. Any angle: behind, over a shoulder, beside or in front of you.
+- **Video-ready framing**: a framed hero screen that fills the shot, a bigger-screens mode, or real positions, plus a **clean screen** file of just the focused screen. Sharp camera settings and steady exposure while recording.
 - Both are saved at the same time as separate files in Movies/OrbitWalker, ready to cut together. **Ctrl+Alt+S** records; **Ctrl+Alt+M** opens a camera monitor in the glasses to line up the overlay.
+- Your typing, notifications and Orbit's captions never appear in recordings.
 
 **Made for long sessions**
 - **Eye care**: a reminder every 20 minutes (adjustable) to look far away, and a real-break nudge after 90 minutes. Never during a film.
@@ -69,8 +82,9 @@ VITURE's glasses stream their motion sensors, but on Android their own app only 
 - **Mirror mode** shows your phone screen pinned in space, with no setup at all.
 
 **Private by design**
-- No accounts, no analytics, no ads, no cloud. Network use stays on your phone: it talks to its own Wireless debugging service, and that's it.
-- Everything runs on the phone: the head tracking, the window management and the input handling.
+- No accounts, no analytics, no ads, no Orbit cloud. Head tracking, window management and input handling all run on the phone.
+- OrbitWalker goes online only for things you turn on: the Orbit agent talks to **your own Orbit Server** (pinned certificate or your own HTTPS), "Hey Orbit" downloads its offline listening model once (checksum-verified), and the browser loads the pages you open.
+- "Hey Orbit" listening never leaves the phone; only what you say after it goes to your server.
 
 ## How OrbitWalker gets its powers
 
@@ -158,13 +172,13 @@ OrbitWalker helper (shell uid) ─ virtual display per app ─▶ OpenGL ES scen
 
 | App | The idea |
 |---|---|
-| **Orbit Health** | Your smart ring's data on your phone, not a vendor's server. |
+| **[Orbit Health](https://github.com/Kno2gether-Labs-LTD/orbit-health)** (out now) | Your smart ring's data on your phone, not a vendor's server. |
 | **Orbit Secure** | Cheap cameras and doorbells, recorded to your own space. |
 | **Orbit Home** | Smart plugs and bulbs controlled locally, no vendor account. |
-| **Orbit Server** | One box you own, instead of a subscription per vendor. |
+| **[Orbit Server](https://github.com/Kno2gether-Labs-LTD/orbit-server)** (out now) | One box you own, instead of a subscription per vendor: your data, your AI agent, your voices. |
 | **Orbit Agents** | Your own AI on your own hardware, under rules you set. |
 
-A home for all of them is on its way at **[orbitapps.space](https://orbitapps.space)**: the story behind each app, downloads, and guides on how to use them.
+Their home is **[orbitapps.space](https://orbitapps.space)**: the story behind each app, downloads, and [guides on how to use them](https://orbitapps.space/docs/).
 
 ## Built by Kno2gether Labs
 

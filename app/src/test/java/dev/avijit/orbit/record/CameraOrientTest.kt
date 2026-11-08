@@ -39,4 +39,31 @@ class CameraOrientTest {
         // Portrait: the stream's 6.4 mm side is vertical.
         assertEquals(65.2f, CameraOrient.verticalFovDeg(5f, 6.4f, 4.8f, rotation = 90, outAspect = 9f / 16f), 0.1f)
     }
+
+    @Test fun tilt_fromGravity() {
+        assertEquals(0, CameraOrient.tiltDeg(ax = 0f, ay = 9.8f))     // upright
+        assertEquals(90, CameraOrient.tiltDeg(ax = -9.8f, ay = 0f))   // turned clockwise (top to the right)
+        assertEquals(180, CameraOrient.tiltDeg(ax = 0f, ay = -9.8f))  // upside down
+        assertEquals(270, CameraOrient.tiltDeg(ax = 9.8f, ay = 0f))   // turned anticlockwise (top to the left)
+        assertEquals(0, CameraOrient.tiltDeg(ax = -3f, ay = 9f))      // a little leaning still counts as upright
+        assertEquals(null, CameraOrient.tiltDeg(ax = 0.5f, ay = 0.8f)) // lying flat
+    }
+
+    @Test fun chosenStand_keepsTheShape_gravityPicksWhichWayUp() {
+        assertEquals(90, CameraOrient.deviceDeg(PhoneStand.AUTO, 90))
+        assertEquals(0, CameraOrient.deviceDeg(PhoneStand.AUTO, null))
+        // Upright chosen: stays portrait even if gravity reads it turned.
+        assertEquals(0, CameraOrient.deviceDeg(PhoneStand.UPRIGHT, 90))
+        assertEquals(180, CameraOrient.deviceDeg(PhoneStand.UPRIGHT, 180))
+        assertEquals(270, CameraOrient.deviceDeg(PhoneStand.SIDEWAYS, 0))
+        assertEquals(90, CameraOrient.deviceDeg(PhoneStand.SIDEWAYS, 90))
+    }
+
+    @Test fun deviceTurn_matchesDisplayRotation() {
+        // Upright phone, back camera (sensor 90°): the picture turns 90° and the video is portrait.
+        assertEquals(90, CameraOrient.rotation(90, CameraOrient.displayDegFor(0), front = false))
+        // Top to the left (display ROTATION_90): picture as the sensor sees it, landscape.
+        assertEquals(90, CameraOrient.displayDegFor(270))
+        assertEquals(0, CameraOrient.rotation(90, CameraOrient.displayDegFor(270), front = false))
+    }
 }

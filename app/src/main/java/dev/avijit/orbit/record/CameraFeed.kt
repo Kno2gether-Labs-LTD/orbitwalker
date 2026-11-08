@@ -36,6 +36,13 @@ data class CameraSpec(
     /** Below 1 = the wide (0.5×/0.6×) lens of a logical camera. */
     val zoomRatio: Float,
     val label: String,
+    /** The sensor's own turn (CameraCharacteristics.SENSOR_ORIENTATION). */
+    val sensorDeg: Int = 90,
+    /** The camera can expose for faces (CONTROL_SCENE_MODE_FACE_PRIORITY). */
+    val facePriority: Boolean = false,
+    val distortionCorrection: Boolean = false,
+    val hqNoise: Boolean = false,
+    val hqEdge: Boolean = false,
 )
 
 /** Camera2 feed: a full-size stream into the renderer's texture and a small one for person detection. */
@@ -87,15 +94,41 @@ class CameraFeed(private val context: Context, val spec: CameraSpec, private val
                     mask?.let { addTarget(it.surface) }
                     set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(30, 30))
                     if (spec.zoomRatio != 1f) set(CaptureRequest.CONTROL_ZOOM_RATIO, spec.zoomRatio)
+                    // Expose for your face, not the window behind you.
+                    if (spec.facePriority) {
+                        set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_USE_SCENE_MODE)
+                        set(CaptureRequest.CONTROL_SCENE_MODE, CaptureRequest.CONTROL_SCENE_MODE_FACE_PRIORITY)
+                    }
                     // Stabilisation crops and shifts the picture, which would break the overlay's alignment.
                     set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
-                }.build()
-                runCatching { s.setRepeatingRequest(req, null, handler) }.onFailure { DiagLog.e(TAG, "camera request failed", it) }
-                DiagLog.i(TAG, "camera on: ${spec.label} ${spec.previewW}x${spec.previewH} rot ${spec.rotation} vfov %.1f°".format(spec.vfovDeg))
+                    // The best picture the phone can make at 30 fps: straight lines (no wide-lens bulge), clean and sharp.
+                    if (spec.distortionCorrection) set(CaptureRequest.DISTORTION_CORRECTION_MODE, CaptureRequest.DISTORTION_CORRECTION_MODE_HIGH_QUALITY)
+                    if (spec.hqNoise) set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY)
+                    if (spec.hqEdge) set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_HIGH_QUALITY)
+                    // While recording: exposure and white balance hold still, so the picture doesn't pulse as screens change.
+                    set(CaptureRequest.CONTROL_AE_LOCK, locked)
+                    set(CaptureRequest.CONTROL_AWB_LOCK, locked)
+                }
+                builder = req
+                runCatching { s.setRepeatingRequest(req.build(), null, handler) }.onFailure { DiagLog.e(TAG, "camera request failed", it) }
+                DiagLog.i(TAG, "camera on: ${spec.label} ${spec.previewW}x${spec.previewH} rot ${spec.rotation} vfov %.1f° straighten=${spec.distortionCorrection} hqNoise=${spec.hqNoise} hqEdge=${spec.hqEdge}".format(spec.vfovDeg))
             }
             override fun onConfigureFailed(s: CameraCaptureSession) { DiagLog.e(TAG, "camera session failed") }
         })
         runCatching { camera.createCaptureSession(cfg) }.onFailure { DiagLog.e(TAG, "camera session failed", it) }
+    }
+
+    private var builder: CaptureRequest.Builder? = null
+    @Volatile private var locked = false
+
+    /** Holds exposure and white balance (recording) or lets them follow the room again. */
+    fun lockExposure(on: Boolean) {
+        locked = on
+        handler.post {
+            val b = builder ?: return@post; val s = session ?: return@post
+            b.set(CaptureRequest.CONTROL_AE_LOCK, on); b.set(CaptureRequest.CONTROL_AWB_LOCK, on)
+            runCatching { s.setRepeatingRequest(b.build(), null, handler) }
+        }
     }
 
     fun close() {
@@ -136,7 +169,11 @@ class CameraFeed(private val context: Context, val spec: CameraSpec, private val
                 CameraOrient.verticalFovDeg(focal(c) * zoom, phys.width, phys.height, rotation, outW.toFloat() / outH)
             } else if (outW > outH) 45f else 70f
             val label = "${if (front) "front" else "back"}${if (zoom < 1f) " wide ${"%.1f".format(zoom)}×" else ""} camera"
-            return CameraSpec(id, front, preview.width, preview.height, rotation, outW, outH, vfov, zoom, label)
+            return CameraSpec(id, front, preview.width, preview.height, rotation, outW, outH, vfov, zoom, label, sensorDeg,
+                facePriority = c.get(CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES)?.contains(CameraCharacteristics.CONTROL_SCENE_MODE_FACE_PRIORITY) == true,
+                distortionCorrection = c.get(CameraCharacteristics.DISTORTION_CORRECTION_AVAILABLE_MODES)?.contains(CameraCharacteristics.DISTORTION_CORRECTION_MODE_HIGH_QUALITY) == true,
+                hqNoise = c.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES)?.contains(CameraCharacteristics.NOISE_REDUCTION_MODE_HIGH_QUALITY) == true,
+                hqEdge = c.get(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES)?.contains(CameraCharacteristics.EDGE_MODE_HIGH_QUALITY) == true)
         }
 
         private fun pick169(sizes: List<Size>): Size? {

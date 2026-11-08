@@ -146,6 +146,14 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
         dev.avijit.orbit.diag.TestHarness.handler = harness
         dev.avijit.orbit.record.Recorder.init(this)
         dev.avijit.orbit.record.Recorder.onReport = { msg, error -> screens.notice(msg, error) }
+        dev.avijit.orbit.agent.OrbitAgent.init(this)
+        dev.avijit.orbit.agent.WakeWord.init(this)
+        dev.avijit.orbit.agent.OrbitAgent.attach(glassesHost)
+        screens.onAgentMic = { dev.avijit.orbit.agent.OrbitAgent.listen() }
+        if (dev.avijit.orbit.agent.WakeWord.enabled && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            dev.avijit.orbit.agent.AgentService.start(this)
+        }
+        handlePairLink(intent)
         loadPrefs()
         DiagLog.i(TAG, "Orbit ${BuildConfig.VERSION_NAME} starting")
 
@@ -171,6 +179,28 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) source.start()
+        handlePairLink(intent)
+    }
+
+    /** An `orbitwalker://pair` link (from the Orbit Server dashboard): open the agent screen with it filled in. */
+    private fun handlePairLink(i: Intent?) {
+        val d = i?.data ?: return
+        if (d.scheme != "orbitwalker") return
+        dev.avijit.orbit.ui.AgentNav.pendingLink.value = d.toString()
+        dev.avijit.orbit.ui.AgentNav.open.value = true
+    }
+
+    /** What the Orbit agent's glasses tools act on. */
+    private val glassesHost = object : dev.avijit.orbit.agent.GlassesHost {
+        override val screens get() = this@MainActivity.screens
+        override fun allApps() = launchableAppsAll()
+        override fun setBackgroundMode(name: String): Boolean {
+            val m = runCatching { dev.avijit.orbit.render.BackgroundMode.valueOf(name.uppercase()) }.getOrNull() ?: return false
+            setBackground(m, screens.dimWithApps, screens.dimNoApps, screens.showMarkers)
+            return true
+        }
+        override fun backgroundMode() = screens.background.name.lowercase()
+        override fun openStudio() = this@MainActivity.openStudio()
     }
 
     /** Read once per resume (a Settings lookup), not on every UI tick. */
@@ -192,6 +222,7 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
         ui.removeCallbacks(rawTick)
         ui.removeCallbacks(eyeTick)
         if (dev.avijit.orbit.diag.TestHarness.handler === harness) dev.avijit.orbit.diag.TestHarness.handler = null
+        if (isFinishing) dev.avijit.orbit.agent.OrbitAgent.attach(null)
         if (isFinishing) {
             rawInput.sync(false)
             cinemaWorker.looper.quitSafely()
@@ -285,8 +316,11 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
             DiagLog.i(TAG, "shortcut: find cursor")
         }
         override fun onRecordShortcut() = runOnUiThread { dev.avijit.orbit.record.Recorder.toggle() }
-        override fun onCameraMonitorShortcut() = runOnUiThread { dev.avijit.orbit.record.Recorder.toggleMonitor() }
-        override fun calibrating(): Boolean = dev.avijit.orbit.record.Recorder.monitorOn
+        override fun onCameraMonitorShortcut() = runOnUiThread { openStudio() }
+        override fun onAgentShortcut() = runOnUiThread { dev.avijit.orbit.agent.OrbitAgent.listen() }
+        // With the studio open, its keys only work while it's the focused screen (you may be typing elsewhere).
+        override fun calibrating(): Boolean = dev.avijit.orbit.record.Recorder.monitorOn &&
+            (!dev.avijit.orbit.record.Recorder.studioOpen || screens.studioFocused())
         override fun onCalibrationKey(keyCode: Int, shift: Boolean) = dev.avijit.orbit.record.Recorder.calibrate(keyCode, shift)
         override fun onRecenterShortcut() {
             runOnUiThread {
@@ -756,6 +790,12 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
     override fun openApp(component: String) = screens.openApp(component)
 
     /** Orbit Browser: a screen in the glasses when screens can open, otherwise on the phone. */
+    /** The camera studio screen in the glasses; without app screens, the floating camera monitor. */
+    override fun openStudio() {
+        val screensReady = screens.gate.state == HelperState.READY && !screens.mirrorOn && glassesDisplay() != null
+        if (screensReady) screens.toggleStudio() else dev.avijit.orbit.record.Recorder.toggleMonitor()
+    }
+
     override fun openBrowser() {
         val screensReady = screens.gate.state == HelperState.READY && !screens.mirrorOn && glassesDisplay() != null
         if (screensReady) screens.openBrowser() else dev.avijit.orbit.browser.BrowserHub.openOnPhone(this)
@@ -765,6 +805,8 @@ class MainActivity : ComponentActivity(), OrbitActions, dev.avijit.orbit.render.
 
     private fun entryFor(component: String) =
         if (component == dev.avijit.orbit.browser.BrowserHub.COMPONENT) browserEntry()
+        else if (component == dev.avijit.orbit.record.StudioLayout.COMPONENT) AppEntry(dev.avijit.orbit.record.StudioLayout.LABEL, component, packageName)
+        else if (component == dev.avijit.orbit.ui.AppLibrary.COMPONENT) AppEntry(dev.avijit.orbit.ui.AppLibrary.LABEL, component, packageName)
         else AppEntry(appLabel(component.substringBefore('/')), component, component.substringBefore('/'))
     override fun reopenLast() = screens.reopenLast()
 

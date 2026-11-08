@@ -4,7 +4,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class RecordingView(val suffix: String) { GLASSES("glasses"), MIXED("mixed reality") }
+/** [CLEAN]: just the screen you're using, flat and full size, for pinning onto a wall in a video editor. */
+enum class RecordingView(val suffix: String) { GLASSES("glasses"), MIXED("mixed reality"), CLEAN("clean screen") }
 
 object RecordingNames {
     fun file(start: Date, view: RecordingView): String =
@@ -56,4 +57,10 @@ class MuxGate(private val tracks: Int) {
         }
         return true
     }
+}
+
+/** What's behind you in the mixed reality view. */
+enum class MixedBackground(val label: String) {
+    REAL("Real room"),
+    VIRTUAL("Virtual space"),
 }

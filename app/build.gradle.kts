@@ -11,8 +11,8 @@ android {
         applicationId = "dev.avijit.orbit"
         minSdk = 33
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.14.0"
+        versionCode = 27
+        versionName = "0.18.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     // Release signing: the key lives outside the repo (~/.gradle/gradle.properties points to it).
@@ -67,5 +67,8 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
     // Mixed reality recording: finds you in the camera picture, on the phone (bundled model, no network).
     implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
+    // "Hey Orbit": offline keyword spotting on the phone (Apache-2.0). The model downloads on first use.
+    implementation("com.alphacephei:vosk-android:0.3.47")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     testImplementation("junit:junit:4.13.2")
 }
