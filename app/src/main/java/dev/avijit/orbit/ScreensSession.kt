@@ -10,6 +10,7 @@ import dev.avijit.orbit.diag.DiagLog
 import dev.avijit.orbit.input.ScrollAccumulator
 import dev.avijit.orbit.input.TrackpadAction
 import dev.avijit.orbit.browser.BrowserHub
+import dev.avijit.orbit.record.StudioLayout
 import dev.avijit.orbit.layout.CursorRay
 import dev.avijit.orbit.layout.LayoutParams
 import dev.avijit.orbit.layout.ScreenLayout
@@ -143,6 +144,31 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
     fun openBrowser(url: String? = null, adoptTab: Long? = null) =
         openOnNewSlot(BrowserHub.COMPONENT, BrowserHub.OpenRequest(url, adoptTab))
 
+    fun studioFocused() = focused?.let { panels[it]?.component } == StudioLayout.COMPONENT
+
+    /** Ctrl+Alt+M: opens the camera studio screen, or closes it if it's open. */
+    fun toggleStudio() {
+        val open = panels.entries.firstOrNull { it.value.component == StudioLayout.COMPONENT }?.key
+        if (open != null) closeScreen(open) else openOnNewSlot(StudioLayout.COMPONENT, null)
+    }
+
+    private fun librarySlot() = panels.entries.firstOrNull { it.value.component == dev.avijit.orbit.ui.AppLibrary.COMPONENT }?.key
+
+    /** The dock's "All apps": every app on the phone, as a screen in the glasses. */
+    fun openLibrary() {
+        val open = librarySlot()
+        if (open != null) work { focusSlot(open) } else openOnNewSlot(dev.avijit.orbit.ui.AppLibrary.COMPONENT, null)
+    }
+
+    fun closeLibrary() { librarySlot()?.let { closeScreen(it) } }
+
+    /** Picked in the library: the app takes the library's place (or, if it's already open, comes to the front). */
+    fun openFromLibrary(component: String) {
+        val already = panels.entries.firstOrNull { it.value.component == component }?.key
+        work { librarySlot()?.let { releaseDisplay(it); removeSlot(it) } }
+        if (already != null) work { focusSlot(already); rememberScreens() } else openOnNewSlot(component, null)
+    }
+
     private fun openOnNewSlot(component: String, browser: BrowserHub.OpenRequest?) {
         if (mirrorOn) return report("Turn off Mirror mode to open app screens", error = true)
         work {
@@ -154,8 +180,10 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
             focusSlot(slot)
             openOnPanel(slot)
             rememberScreens()
-            recentApps = dev.avijit.orbit.layout.AppDock.push(recentApps, component)
-            prefs.edit().putString(KEY_RECENT, recentApps.joinToString("|")).apply()
+            if (component != StudioLayout.COMPONENT && component != dev.avijit.orbit.ui.AppLibrary.COMPONENT) {
+                recentApps = dev.avijit.orbit.layout.AppDock.push(recentApps, component)
+                prefs.edit().putString(KEY_RECENT, recentApps.joinToString("|")).apply()
+            }
         }
     }
 
@@ -373,6 +401,18 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         focused?.let { setOffset(it, SlotOffset()) }
     }
 
+    /** The agent moved or resized a screen: [slot]'s offset changed by these amounts (kept inside the allowed space). */
+    fun adjustScreen(slot: Int, dYawDeg: Float = 0f, dPitchDeg: Float = 0f, dDistanceM: Float = 0f, scaleBy: Float = 1f, reset: Boolean = false) = work {
+        if (slot !in panels) return@work
+        val o = if (reset) SlotOffset() else offsets[slot].let {
+            it.copy(yawDeg = it.yawDeg + dYawDeg, pitchDeg = it.pitchDeg + dPitchDeg, distanceM = it.distanceM + dDistanceM, scale = it.scale * scaleBy)
+        }
+        setOffset(slot, ScreenLayout.clampOffset(slot, layout, o))
+    }
+
+    /** Screen label for an open slot ("Chrome", "Camera studio"…). */
+    fun labelOf(slot: Int): String? = panels[slot]?.component?.let { label(it) }
+
     fun resetLayout() {
         layout = LayoutParams()
         offsets = List(ScreenLayout.SLOTS) { SlotOffset() }
@@ -542,14 +582,20 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
     private fun dockApps(): List<String> =
         if (gate.state == dev.avijit.orbit.shell.HelperState.READY) dockItems() else emptyList()
 
+    /** 2 when the dock ends with the Orbit mic and "All apps" (only while the helper can open apps). */
+    private fun libraryButton(): Int = if (gate.state == dev.avijit.orbit.shell.HelperState.READY) 2 else 0
+
+    /** The dock's mic: talk to the Orbit agent (MainActivity wires it). */
+    @Volatile var onAgentMic: (() -> Unit)? = null
+
     private fun widgetSlots(): Float = if (widgetsEnabled) dev.avijit.orbit.layout.AppDock.WIDGET_SLOTS else 0f
 
     /** Under the centre screen: clock/battery widgets and recent apps. Hidden during Mirror and while the keyboard shows. */
     fun dockPose(): ScreenPose? {
         if (!dockEnabled || mirrorOn || keyboardVisible) return null
-        val n = dockApps().size
+        if (gate.state != dev.avijit.orbit.shell.HelperState.READY && widgetSlots() == 0f) return null
+        val n = dockApps().size + libraryButton()
         val w = widgetSlots()
-        if (n == 0 && w == 0f) return null
         return dev.avijit.orbit.layout.AppDock.pose(pose(0), n, w)
     }
 
@@ -670,7 +716,9 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         val hit = hitTest(cursor.direction(), activeSlots().associateWith { pose(it) } + (DOCK_SLOT to d)) ?: return false
         if (hit.slot != DOCK_SLOT) return false
         val items = dockApps()
-        val i = dev.avijit.orbit.layout.AppDock.indexAt(hit.u, items.size, widgetSlots()) ?: return true
+        val i = dev.avijit.orbit.layout.AppDock.indexAt(hit.u, items.size + libraryButton(), widgetSlots()) ?: return true
+        if (i == items.size) { DiagLog.i(TAG, "dock: orbit mic"); onAgentMic?.invoke(); return true }
+        if (i == items.size + 1) { DiagLog.i(TAG, "dock: all apps"); openLibrary(); return true }
         DiagLog.i(TAG, "dock: open ${items[i].substringBefore('/')}")
         openApp(items[i])
         return true
@@ -681,7 +729,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         val key = Triple(items, hover, w)
         dockArt?.takeIf { dockArtKey == key }?.let { return it }
         val icons = items.map { comp -> iconFor(comp.substringBefore('/')) }
-        return dev.avijit.orbit.render.DockArt.render(w, icons, items.map { label(it) }, hover).also {
+        return dev.avijit.orbit.render.DockArt.render(w, icons, items.map { label(it) }, hover, allApps = libraryButton() > 0).also {
             dockArt = it
             dockArtKey = key
         }
@@ -719,7 +767,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         val dockArtNow = dock?.let { d ->
             val items = dockApps()
             val hit = hitTest(cursor.direction(), activeSlots().associateWith { pose(it) } + (DOCK_SLOT to d))
-            val hover = hit?.takeIf { it.slot == DOCK_SLOT }?.let { dev.avijit.orbit.layout.AppDock.indexAt(it.u, items.size, widgetSlots()) }
+            val hover = hit?.takeIf { it.slot == DOCK_SLOT }?.let { dev.avijit.orbit.layout.AppDock.indexAt(it.u, items.size + libraryButton(), widgetSlots()) }
             dockArtFor(items, hover)
         }
         val bar = windowBarPose()
@@ -745,7 +793,7 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
         if (active.isEmpty() && dockPose() == null) return SceneSnapshot()
         val poses = active.associateWith { pose(it) }
         val f = focused
-        val draws = poses.map { (slot, p) -> ScreenDraw(slot, p, slot == f) }
+        val draws = poses.map { (slot, p) -> ScreenDraw(slot, p, slot == f, studio = panels[slot]?.component == StudioLayout.COMPONENT) }
         if (!pointerVisible) return SceneSnapshot(draws, null, false, showHeadDot = false)
         val dir = cursor.direction()
         val hit = hitTest(dir, poses + overlays())
@@ -807,6 +855,8 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
             DiagLog.i(TAG, "slot $slot display $id ime=$ime (${runCatching { shell.info() }.getOrNull()})")
         }
         if (comp == BrowserHub.COMPONENT) BrowserHub.expect(id, browserRequests.remove(slot) ?: BrowserHub.OpenRequest(null, null))
+        if (comp == StudioLayout.COMPONENT) StudioLayout.expect(id)
+        if (comp == dev.avijit.orbit.ui.AppLibrary.COMPONENT) dev.avijit.orbit.ui.AppLibrary.expect(id)
         val out = try { shell.launch(id, comp) } catch (t: Throwable) { "Error: ${t.javaClass.simpleName}: ${t.message}" }
         DiagLog.i(TAG, "am start slot $slot → ${out.replace("\n", " | ")}")
         val code = out.substringAfter("exit ", "").substringBefore('\n').trim().toIntOrNull() ?: 1
@@ -853,10 +903,14 @@ class ScreensSession private constructor(private val context: Context) : PanelHo
     private fun safeError(shell: IOrbitShell) = runCatching { shell.lastError() }.getOrNull() ?: "unknown error"
 
     private fun label(component: String) =
-        if (component == BrowserHub.COMPONENT) BrowserHub.LABEL else labeler(component.substringBefore('/'))
+        if (component == BrowserHub.COMPONENT) BrowserHub.LABEL
+        else if (component == StudioLayout.COMPONENT) StudioLayout.LABEL
+        else if (component == dev.avijit.orbit.ui.AppLibrary.COMPONENT) dev.avijit.orbit.ui.AppLibrary.LABEL
+        else labeler(component.substringBefore('/'))
 
     private fun rememberScreens() {
-        val list = panels.toSortedMap().values.mapNotNull { it.component }
+        // Not the studio: it turns the camera on, so it only opens when asked.
+        val list = panels.toSortedMap().values.mapNotNull { it.component }.filter { it != StudioLayout.COMPONENT && it != dev.avijit.orbit.ui.AppLibrary.COMPONENT }
         if (list.isNotEmpty()) {
             lastScreens = list
             prefs.edit().putString(KEY_LAST, list.joinToString("|")).apply()

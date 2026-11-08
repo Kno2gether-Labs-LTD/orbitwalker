@@ -6,7 +6,11 @@ import dev.avijit.orbit.layout.ScreenPose
 enum class BackgroundMode(val label: String) { ORBIT("Orbit"), SPACE("Space"), LOGO("Logo"), BLACK("Pure black") }
 
 /** One screen to draw this frame. */
-data class ScreenDraw(val slot: Int, val pose: ScreenPose, val focused: Boolean, val content: ContentMode = ContentMode.FLAT)
+data class ScreenDraw(
+    val slot: Int, val pose: ScreenPose, val focused: Boolean, val content: ContentMode = ContentMode.FLAT,
+    /** The camera studio: the live camera picture is drawn onto it, and it never appears in recordings. */
+    val studio: Boolean = false,
+)
 
 /** Everything the glasses scene needs for one frame; immutable, swapped atomically by the session. */
 data class SceneSnapshot(

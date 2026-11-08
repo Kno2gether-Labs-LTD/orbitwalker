@@ -78,9 +78,12 @@ fun OrbitApp(state: UiState, actions: OrbitActions) {
     BackHandler(enabled = !fullscreen && state.moveMode) { actions.setMoveMode(false) }
 
     Box(Modifier.fillMaxSize().background(Orbit.Bg)) {
-        if (record) {
+        if (AgentNav.open.value) {
+            BackHandler { AgentNav.open.value = false }
+            AgentScreen(onClose = { AgentNav.open.value = false; AgentNav.pendingLink.value = null }, pendingLink = AgentNav.pendingLink.value)
+        } else if (record) {
             BackHandler { record = false }
-            RecordScreen(onClose = { record = false })
+            RecordScreen(onClose = { record = false }, onStudio = { actions.openStudio() })
         } else if (setup) {
             BackHandler { setup = false }
             SetupScreen(state, actions, onClose = { setup = false })

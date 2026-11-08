@@ -43,6 +43,8 @@ class RawInputController(
         fun onRecordShortcut()
         /** Ctrl+Alt+M: show or hide the mixed reality camera monitor (and calibration). */
         fun onCameraMonitorShortcut()
+        /** Ctrl+Alt+O: talk to the Orbit agent. */
+        fun onAgentShortcut() {}
         /** While the camera monitor is open, arrows etc. line up the camera instead of reaching apps. */
         fun calibrating(): Boolean
         fun onCalibrationKey(keyCode: Int, shift: Boolean)
@@ -191,6 +193,7 @@ class RawInputController(
             GlobalShortcut.RECENTER -> { sink.onRecenterShortcut(); return }
             GlobalShortcut.RECORD -> { sink.onRecordShortcut(); return }
             GlobalShortcut.CAMERA_MONITOR -> { sink.onCameraMonitorShortcut(); return }
+            GlobalShortcut.AGENT -> { sink.onAgentShortcut(); return }
             null -> Unit
         }
         if (value != 0 && sink.calibrating() && dev.avijit.orbit.record.CalKey.of(android) != null) {

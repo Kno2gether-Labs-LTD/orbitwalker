@@ -47,9 +47,37 @@ class TestHarness : BroadcastReceiver() {
                 val on = intent.getBooleanExtra("on", true)
                 val r = dev.avijit.orbit.record.Recorder
                 when (intent.getStringExtra("name")) {
-                    "glasses" -> r.glassesView = on; "mixed" -> r.mixedReality = on; "mic" -> r.microphone = on
+                    "glasses" -> r.glassesView = on; "mixed" -> r.mixedReality = on; "clean" -> r.cleanScreen = on; "mic" -> r.microphone = on
                     "bubble" -> r.faceBubble = on; "person" -> r.personInFront = on; "wide" -> r.wideLens = on; "front" -> r.frontCamera = on
                 }
+            }
+            "agentAsk" -> intent.getStringExtra("text")?.let { dev.avijit.orbit.agent.OrbitAgent.ask(it) }
+            "agentListen" -> dev.avijit.orbit.agent.OrbitAgent.listen()
+            "agentPair" -> intent.getStringExtra("link")?.let { l ->
+                val p = dev.avijit.orbit.agent.PairLink.parse(l)
+                if (p == null) DiagLog.e(TAG, "agentPair: not a pairing link")
+                else Thread {
+                    runCatching { dev.avijit.orbit.agent.OrbitAgent.link.pair(p, "OrbitWalker on ${android.os.Build.MODEL}") }
+                        .onSuccess { DiagLog.i(TAG, "agentPair: paired with ${it.serverName}") }
+                        .onFailure { DiagLog.e(TAG, "agentPair failed", it) }
+                }.start()
+            }
+            "agentVoice" -> { dev.avijit.orbit.agent.Voices.selected = intent.getStringExtra("id").orEmpty(); dev.avijit.orbit.agent.Voices.refresh() }
+            "agentEnd" -> dev.avijit.orbit.agent.OrbitAgent.endSession()
+            "agentUnpair" -> dev.avijit.orbit.agent.OrbitAgent.link.forget()
+            "wake" -> dev.avijit.orbit.agent.WakeWord.setEnabled(intent.getBooleanExtra("on", true))
+            "recStage" -> intent.getStringExtra("name")?.let { n ->
+                runCatching { dev.avijit.orbit.record.ScreenStaging.valueOf(n) }.getOrNull()?.let { dev.avijit.orbit.record.Recorder.staging = it }
+            }
+            "recSide" -> intent.getStringExtra("name")?.let { n ->
+                runCatching { dev.avijit.orbit.record.HeroSide.valueOf(n) }.getOrNull()?.let { dev.avijit.orbit.record.Recorder.heroSide = it }
+            }
+            "recFill" -> dev.avijit.orbit.record.Recorder.heroFill = intent.getFloatExtra("value", dev.avijit.orbit.record.Staging.DEFAULT_FILL)
+            "recBg" -> intent.getStringExtra("name")?.let { n ->
+                runCatching { dev.avijit.orbit.record.MixedBackground.valueOf(n) }.getOrNull()?.let { dev.avijit.orbit.record.Recorder.background = it }
+            }
+            "recStand" -> intent.getStringExtra("name")?.let { n ->
+                runCatching { dev.avijit.orbit.record.PhoneStand.valueOf(n) }.getOrNull()?.let { dev.avijit.orbit.record.Recorder.phoneStand = it }
             }
             "frame" -> h.frame()
             "reclaim" -> h.reclaim()

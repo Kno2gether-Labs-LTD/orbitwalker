@@ -163,7 +163,8 @@ class Mp4File private constructor(
         const val MIME_VIDEO = MediaFormat.MIMETYPE_VIDEO_AVC
         const val MIME_AUDIO = MediaFormat.MIMETYPE_AUDIO_AAC
         const val FPS = 30
-        private const val BITRATE = 12_000_000
+        /** 1080p at 30 fps: plenty for small text on screens and fine detail in the room. */
+        private const val BITRATE = 24_000_000
 
         /** Largest of [sizes] the phone's H.264 encoder supports (portrait 1080×1920 isn't universal). */
         fun supportedSize(sizes: List<Pair<Int, Int>>): Pair<Int, Int> {

@@ -1,9 +1,43 @@
 package dev.avijit.orbit.record
 
 import kotlin.math.atan
+import kotlin.math.atan2
+import kotlin.math.hypot
+import kotlin.math.roundToInt
+
+/** How the phone stands on its tripod, which decides the mixed reality video's shape. */
+enum class PhoneStand(val label: String) {
+    AUTO("Auto"),
+    UPRIGHT("Upright (9:16)"),
+    SIDEWAYS("On its side (16:9)"),
+}
 
 /** Turning the camera's sensor picture upright, and working out what the lens sees. */
 object CameraOrient {
+    /**
+     * How far the phone is turned from upright, clockwise in degrees (0, 90, 180, 270), from the
+     * accelerometer ([ax], [ay] in the device's natural frame). Null when it lies too flat to tell.
+     * Same convention as OrientationEventListener and the camera's sensor orientation.
+     */
+    fun tiltDeg(ax: Float, ay: Float): Int? {
+        if (hypot(ax, ay) < 3f) return null
+        val deg = 90 - Math.toDegrees(atan2(ay.toDouble(), -ax.toDouble())).roundToInt()
+        return (((deg / 90.0).roundToInt() * 90) % 360 + 360) % 360
+    }
+
+    /**
+     * Turn of the phone (clockwise from upright) to film with: [tilt] when [stand] is Auto; otherwise
+     * the chosen shape, turned the way gravity says (so a phone on its side either way is upright).
+     */
+    fun deviceDeg(stand: PhoneStand, tilt: Int?): Int = when (stand) {
+        PhoneStand.AUTO -> tilt ?: 0
+        PhoneStand.UPRIGHT -> if (tilt == 180) 180 else 0
+        PhoneStand.SIDEWAYS -> if (tilt == 90) 90 else 270
+    }
+
+    /** The display rotation that matches a phone turned [deviceDeg] clockwise. */
+    fun displayDegFor(deviceDeg: Int): Int = (360 - deviceDeg) % 360
+
     /** Degrees (clockwise) to turn the sensor picture so it's upright for how the phone is held. */
     fun rotation(sensorDeg: Int, displayDeg: Int, front: Boolean): Int =
         if (front) (sensorDeg + displayDeg) % 360 else (sensorDeg - displayDeg + 360) % 360

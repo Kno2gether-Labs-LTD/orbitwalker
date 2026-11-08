@@ -67,6 +67,9 @@ object CameraRig {
         return (yaw + p.aimYawDeg) to (pitch + p.aimPitchDeg)
     }
 
+    /** The camera's right, up and forward (view direction) in the world. */
+    fun axes(p: RigPose): Array<FloatArray> = basis(p)
+
     private fun basis(p: RigPose): Array<FloatArray> {
         val (yawD, pitchD) = aim(p)
         val y = Math.toRadians(yawD.toDouble()); val pt = Math.toRadians(pitchD.toDouble())

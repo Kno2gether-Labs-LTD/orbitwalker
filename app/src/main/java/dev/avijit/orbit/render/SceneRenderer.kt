@@ -71,8 +71,8 @@ class SceneRenderer(
     private var mrOut: Fbo? = null
     private var mrFresh = false
     private val recThrottle = dev.avijit.orbit.record.FrameThrottle(dev.avijit.orbit.record.Mp4File.FPS)
-    private val hudTextures = IntArray(2)
-    private val hudUploaded = arrayOfNulls<android.graphics.Bitmap>(2)
+    private val hudTextures = IntArray(3)
+    private val hudUploaded = arrayOfNulls<android.graphics.Bitmap>(3)
 
     private val projection = FloatArray(16)
     private val vp = FloatArray(16)
@@ -135,6 +135,7 @@ class SceneRenderer(
         encoders = EncoderSurfaces(); compositor = null; camTex = null; mrLayer = null; mrOut = null
         hudTextures.fill(0); hudUploaded.fill(null)
         artTextures.fill(0) // keyboard + dock textures died with the old context
+        buddyTexture = 0
         artUploaded.fill(null)
         GLES30.glClearColor(0f, 0f, 0f, 1f) // black = transparent on optical see-through glasses
         GLES30.glLineWidth(3f)
@@ -234,8 +235,9 @@ class SceneRenderer(
         val cam = camTex
         mrFresh = false
         if ((mixed != null || rec.monitorOn) && cam != null) {
-            val w = mixed?.width ?: cam.spec.outW / 2
-            val h = mixed?.height ?: cam.spec.outH / 2
+            // Full size for the monitor too: lining up needs a sharp picture, and it's what the file will get.
+            val w = mixed?.width ?: cam.spec.outW
+            val h = mixed?.height ?: cam.spec.outH
             drawMixed(scene, cam, w, h, rec)
         }
         return files.isNotEmpty()
@@ -244,7 +246,7 @@ class SceneRenderer(
     private fun drawMixed(scene: SceneSnapshot, cam: CameraTexture, w: Int, h: Int, rec: dev.avijit.orbit.record.Recorder) {
         if (mrLayer?.width != w || mrLayer?.height != h) {
             mrLayer?.release(); mrOut?.release()
-            mrLayer = Fbo(w, h, withDepth = true); mrOut = Fbo(w, h, withDepth = false)
+            mrLayer = Fbo(w, h, withDepth = true, mipmaps = true); mrOut = Fbo(w, h, withDepth = false)
         }
         val layer = mrLayer!!; val out = mrOut!!
         val comp = compositor ?: Compositor().also { compositor = it }
@@ -262,12 +264,15 @@ class SceneRenderer(
         Matrix.multiplyMM(vp, 0, projection, 0, view, 0)
         System.arraycopy(projection, 0, headProj, 0, 16)
         eyeAspect = aspect; currentEye = Eye.MONO
+        mixedVirtual = rec.background == dev.avijit.orbit.record.MixedBackground.VIRTUAL
+        prepareStage(scene, rec, dev.avijit.orbit.record.CameraRig.zoomed(cam.spec.vfovDeg, rig.zoom), aspect)
         drawEye(scene, view, Pass.REC_MIXED)
         // 2. Camera picture + screens, with you in front of whatever is behind you.
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, out.framebuffer)
         GLES30.glViewport(0, 0, w, h)
         val hasMask = comp.uploadMask(rec.mask?.latest)
-        comp.composite(cam, layer, aspect, hasMask, dev.avijit.orbit.record.CameraRig.personDepth(rig), MR_OPACITY)
+        comp.composite(cam, layer, aspect, hasMask, dev.avijit.orbit.record.CameraRig.personDepth(rig), MR_OPACITY, virtual = mixedVirtual,
+            glow = if (stageMode == dev.avijit.orbit.record.ScreenStaging.REAL) 0f else SCREEN_GLOW)
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         mrFresh = true
     }
@@ -292,6 +297,8 @@ class SceneRenderer(
                     GLES30.glViewport(file.width - size - m, m, size, size)
                     (compositor ?: Compositor().also { compositor = it }).bubble(cam)
                 }
+            } else if (file.view == dev.avijit.orbit.record.RecordingView.CLEAN) {
+                drawClean(scene, file.width, file.height)
             } else {
                 val out = mrOut
                 if (out != null && mrFresh) (compositor ?: Compositor().also { compositor = it }).copy(out.color)
@@ -305,7 +312,7 @@ class SceneRenderer(
     private fun drawRecordingHud() {
         val rec = dev.avijit.orbit.record.Recorder
         rec.statusArt?.let { headLocked(it, 0, -0.43f, 0.27f, 0.035f) }
-        if (!rec.monitorOn) return
+        if (!rec.monitorOn || rec.studioOpen) return // the studio screen carries the picture instead
         val out = mrOut ?: return
         // Longest side 0.36 m at 1.5 m: landscape or portrait, it sits in the lower-right corner.
         val aspect = out.width.toFloat() / out.height
@@ -317,6 +324,143 @@ class SceneRenderer(
         Matrix.multiplyMM(cardMvp, 0, headProj, 0, cardModel, 0)
         spriteDraw(out.color, cardMvp, texQuad, 1f)
         rec.monitorArt?.let { art -> headLocked(art, 1, 0.16f, -0.29f, 0.36f * art.height / art.width, width = 0.36f) }
+    }
+
+    /** The mixed reality picture on the camera studio screen, fitted into its picture area. */
+    private fun drawStudioPicture(pose: dev.avijit.orbit.layout.ScreenPose) {
+        val out = mrOut ?: return
+        if (!dev.avijit.orbit.record.Recorder.monitorOn) return
+        val a = dev.avijit.orbit.record.StudioLayout.PICTURE
+        // The area in metres, then the picture's shape fitted inside it.
+        val areaW = (a[2] - a[0]) * pose.widthM; val areaH = (a[3] - a[1]) * pose.heightM
+        val aspect = out.width.toFloat() / out.height
+        val (w, h) = if (areaW / areaH > aspect) (areaH * aspect) to areaH else areaW to (areaW / aspect)
+        modelFor(pose, 1f)
+        val cx = (a[0] + a[2]) / 2 - 0.5f; val cy = 0.5f - (a[1] + a[3]) / 2
+        Matrix.translateM(model, 0, cx, cy, 0f)
+        Matrix.scaleM(model, 0, w / pose.widthM, h / pose.heightM, 1f)
+        Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST) // drawn right after its own screen, onto it
+        spriteDraw(out.color, mvp, texQuad, 1f)
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+    }
+
+    private fun rotationOnly(view: FloatArray): FloatArray = rotView.also {
+        System.arraycopy(view, 0, it, 0, 16); it[12] = 0f; it[13] = 0f; it[14] = 0f
+    }
+    private val rotView = FloatArray(16)
+    /** This frame's mixed reality view puts you in the virtual space instead of the room. */
+    private var mixedVirtual = false
+
+    // ---------------------------------------------------------------- clean screen file
+
+    /** The screen in the clean file: the one you're using (the studio never). */
+    private var cleanSlot = -1
+    private val cleanView = FloatArray(16)
+
+    /** Just the screen you're using, square-on and filling the file (letterboxed if its shape differs), with the pointer. */
+    private fun drawClean(scene: SceneSnapshot, w: Int, h: Int) {
+        val apps = scene.screens.filter { !it.studio }
+        val s = apps.firstOrNull { it.focused } ?: apps.firstOrNull { it.slot == cleanSlot } ?: apps.firstOrNull() ?: return
+        cleanSlot = s.slot
+        val panel = panels.getOrNull(s.slot) ?: return
+        if (!panel.hasFrame) return
+        val p = s.pose
+        val shape = p.widthM / p.heightM
+        val (vw, vh) = if (w.toFloat() / h > shape) (h * shape).toInt() to h else w to (w / shape).toInt()
+        GLES30.glViewport((w - vw) / 2, (h - vh) / 2, vw, vh)
+        // A camera square in front of the screen, seeing exactly its edges.
+        val (r, u, f) = p.basis(); val c = p.centre()
+        Matrix.setLookAtM(cleanView, 0, c[0] - f[0], c[1] - f[1], c[2] - f[2], c[0], c[1], c[2], u[0], u[1], u[2])
+        Matrix.orthoM(projection, 0, -p.widthM / 2, p.widthM / 2, -p.heightM / 2, p.heightM / 2, 0.01f, 5f)
+        Matrix.multiplyMM(vp, 0, projection, 0, cleanView, 0)
+        currentEye = Eye.MONO
+        modelFor(p, 1f)
+        Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
+        drawTexture(panel, Stereo.contentUv(s.content, currentEye, if (s.content == ContentMode.FLAT) 0f else Stereo.VIDEO_BAR))
+        scene.cursor?.takeIf { dev.avijit.orbit.record.Staging.onScreen(it.centre(), p) }?.let { drawPointer(it, scene) }
+    }
+
+    // ---------------------------------------------------------------- staging (mixed reality only)
+
+    private var stageMode = dev.avijit.orbit.record.ScreenStaging.REAL
+    private val stageCam = FloatArray(3)
+    /** Framed: the screen in the shot, and where it is (eased, so moves and swaps glide). */
+    private var heroSlot = -1
+    private var heroPlace: dev.avijit.orbit.record.Placement? = null
+
+    private fun prepareStage(scene: SceneSnapshot, rec: dev.avijit.orbit.record.Recorder, vfovDeg: Float, aspect: Float) {
+        stageMode = rec.staging
+        System.arraycopy(dev.avijit.orbit.record.CameraRig.position(rec.rig), 0, stageCam, 0, 3)
+        if (stageMode != dev.avijit.orbit.record.ScreenStaging.FRAMED) { heroPlace = null; heroSlot = -1; return }
+        val apps = scene.screens.filter { !it.studio }
+        val pick = apps.firstOrNull { it.focused } ?: apps.firstOrNull { it.slot == heroSlot } ?: apps.firstOrNull()
+        if (pick == null) { heroPlace = null; heroSlot = -1; return }
+        val target = dev.avijit.orbit.record.Staging.framed(pick.pose, rec.rig, vfovDeg, aspect, rec.heroFill, rec.heroSide)
+        val prev = heroPlace
+        heroPlace = if (prev == null || pick.slot != heroSlot) dev.avijit.orbit.record.Staging.entrance(target)
+        else dev.avijit.orbit.record.Staging.lerp(prev, target, HERO_EASE)
+        heroSlot = pick.slot
+    }
+
+    /** Where [s] goes in the mixed reality view; null = left out of the shot. */
+    private fun staged(s: ScreenDraw): dev.avijit.orbit.record.Placement? = when (stageMode) {
+        dev.avijit.orbit.record.ScreenStaging.FRAMED -> if (s.slot == heroSlot) heroPlace else null
+        dev.avijit.orbit.record.ScreenStaging.BIGGER -> dev.avijit.orbit.record.Staging.bigger(s.pose, stageCam)
+        dev.avijit.orbit.record.ScreenStaging.REAL -> dev.avijit.orbit.record.Placement.of(s.pose)
+    }
+
+    /** A panel attached to [anchor] (title bar, dock, pointer), moved along with it. Null = hidden. */
+    private fun stagedWith(pose: ScreenPose, anchor: ScreenDraw?): dev.avijit.orbit.record.Placement? {
+        val a = anchor ?: return null
+        val to = staged(a) ?: return null
+        return dev.avijit.orbit.record.Staging.attached(pose, a.pose, to)
+    }
+
+    private var buddyTexture = 0
+
+    /** The agent's buddy standing on the dock's top edge; with no dock, it shows above the caption while Orbit is busy. */
+    private fun drawBuddy(dock: dev.avijit.orbit.layout.ScreenPose?) {
+        if (!dev.avijit.orbit.agent.OrbitBuddy.enabled || !dev.avijit.orbit.agent.OrbitAgent.paired) return
+        val agentBusy = dev.avijit.orbit.agent.OrbitAgent.inSession || dev.avijit.orbit.agent.OrbitAgent.phase != dev.avijit.orbit.agent.OrbitAgent.Phase.IDLE
+        if (dock == null && !agentBusy) return
+        val f = dev.avijit.orbit.agent.OrbitBuddy.frame(frameNowMs)
+        if (buddyTexture == 0) {
+            val ids = IntArray(1); GLES30.glGenTextures(1, ids, 0); buddyTexture = ids[0]
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, buddyTexture)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, f.art, 0)
+        } else if (f.fresh) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, buddyTexture)
+            android.opengl.GLUtils.texSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, f.art)
+        }
+        if (dock == null) {
+            // Head-locked, just above the caption.
+            Matrix.setIdentityM(cardModel, 0)
+            Matrix.translateM(cardModel, 0, 0f, -0.09f, -CARD_DISTANCE_M)
+            Matrix.scaleM(cardModel, 0, 0.12f, 0.12f, 1f)
+            Matrix.multiplyMM(cardMvp, 0, headProj, 0, cardModel, 0)
+            spriteDraw(buddyTexture, cardMvp, texQuadTopDown, 1f)
+            return
+        }
+        val q = dock.heightM * 0.95f // the picture's size; the buddy itself is about half of it
+        val dist = (dock.distanceM - 0.01f).coerceAtLeast(0.3f)
+        val xOff = f.x * (dock.widthM / 2f - q * 0.3f)
+        val yOff = dock.heightM / 2f + q / 2f - q * (1f - dev.avijit.orbit.agent.OrbitBuddy.FOOT_LINE) + q * 0.08f
+        val pose = dev.avijit.orbit.layout.ScreenPose(
+            dock.yawDeg + Math.toDegrees(kotlin.math.atan2(xOff.toDouble(), dist.toDouble())).toFloat(),
+            dock.pitchDeg + Math.toDegrees(kotlin.math.atan2(yOff.toDouble(), dist.toDouble())).toFloat(),
+            dist, q, q,
+        )
+        modelFor(pose, null, 1f)
+        Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
+        // In front of everything around it, and its see-through corners never hide the pointer.
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+        GLES30.glDepthMask(false)
+        spriteDraw(buddyTexture, mvp, texQuadTopDown, 1f)
+        GLES30.glDepthMask(true)
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST)
     }
 
     private fun headLocked(art: android.graphics.Bitmap, slot: Int, x: Float, y: Float, h: Float, width: Float = h * art.width / art.height) {
@@ -382,34 +526,58 @@ class SceneRenderer(
     private fun drawEye(scene: SceneSnapshot, headView: FloatArray, pass: Pass = Pass.GLASSES) {
         val glasses = pass == Pass.GLASSES
         // Mixed reality: the camera picture is the background, and nothing is locked to your head.
+        // (or, with the virtual space chosen, the space you see, seen from the phone).
         if (pass != Pass.REC_MIXED) drawBackground(scene, headView) // at infinity: same for both eyes
+        else if (mixedVirtual) drawBackground(scene, rotationOnly(headView))
 
         var drewScreen = false
+        val stage = pass == Pass.REC_MIXED && stageMode != dev.avijit.orbit.record.ScreenStaging.REAL
+        val framed = stage && stageMode == dev.avijit.orbit.record.ScreenStaging.FRAMED
         for (s in scene.screens) {
+            if (s.studio && !glasses) continue // your recording controls stay out of the recording
             val panel = panels.getOrNull(s.slot) ?: continue
             if (!panel.hasFrame) continue
+            val place = if (stage) staged(s) ?: continue else null
             drewScreen = true
-            modelFor(s.pose, 1f)
+            modelFor(s.pose, place, 1f)
             Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
             drawTexture(panel, Stereo.contentUv(s.content, currentEye, if (s.content == ContentMode.FLAT) 0f else Stereo.VIDEO_BAR))
-            if (s.focused) {
-                modelFor(s.pose, 1f + OUTLINE_MARGIN)
+            if (s.focused && !framed) {
+                modelFor(s.pose, place, 1f + OUTLINE_MARGIN)
                 Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
                 drawLine(outline, 4, GLES30.GL_LINE_LOOP, FOCUS, mvp)
             }
+            if (s.studio) drawStudioPicture(s.pose)
         }
 
         // Never in recordings: the pressed-key highlight (and the pointer on it) would show what you type, passwords included.
         if (glasses) scene.keyboard?.let { kb -> scene.keyboardArt?.let { art -> drawKeyboard(kb, art) } }
-        scene.dock?.let { d -> scene.dockArt?.let { art -> drawArtPanel(d, art, 1) } }
-        scene.windowBar?.let { b -> scene.windowBarArt?.let { art -> drawArtPanel(b, art, 2) } }
-        if (pass != Pass.REC_MIXED && scene.background == BackgroundMode.ORBIT && scene.orbitApps && scene.backgroundLevel > 0.01f) drawOrbitLabels(scene.backgroundLevel, OrbitSky.skyTime(frameTimeS, scene.orbitStill))
+        val focusedScreen = scene.screens.firstOrNull { it.focused }
+        if (!framed) scene.dock?.let { d -> scene.dockArt?.let { art ->
+            val centre = scene.screens.filter { !it.studio }.minByOrNull { kotlin.math.abs(it.pose.yawDeg) }
+            val place = if (stage) stagedWith(d, centre) else null
+            if (!stage || place != null) drawArtPanel(d, art, 1, place = place)
+        } }
+        // The title bar belongs to the focused screen: none in recordings when that's the studio.
+        // Framed shots stay clean: no title bar (its hints read as clutter in a video).
+        if ((glasses || focusedScreen?.studio != true) && !framed) scene.windowBar?.let { b -> scene.windowBarArt?.let { art ->
+            val place = if (stage) stagedWith(b, focusedScreen) else null
+            if (!stage || place != null) drawArtPanel(b, art, 2, place = place)
+        } }
+        if ((pass != Pass.REC_MIXED || mixedVirtual) && scene.background == BackgroundMode.ORBIT && scene.orbitApps && scene.backgroundLevel > 0.01f) drawOrbitLabels(scene.backgroundLevel, OrbitSky.skyTime(frameTimeS, scene.orbitStill))
+
+        // Orbit, the agent's buddy, on top of the dock (glasses only): always in front of the screens.
+        if (glasses) drawBuddy(scene.dock)
 
         GLES30.glUseProgram(lineProgram)
         if (glasses && !drewScreen && scene.showGrid && scene.showMarkers) gridBatches.forEach { draw(it, vp) }
         if (glasses && scene.showMarkers) ringBatches.forEach { draw(it, vp) }
         scene.cursor?.let { c ->
-            if (glasses || scene.keyboard == null) drawPointer(c, scene)
+            val place = if (!stage) null else {
+                val on = scene.screens.firstOrNull { !it.studio && dev.avijit.orbit.record.Staging.onScreen(c.centre(), it.pose) }
+                stagedWith(c, on ?: if (framed) null else focusedScreen)
+            }
+            if ((glasses || scene.keyboard == null) && (!stage || place != null)) drawPointer(c, scene, place)
             if (glasses) drawCursorHint(c, headView)
         }
         if (!glasses) return // recordings: no head-locked aids, notifications (private) or recording HUD
@@ -418,6 +586,8 @@ class SceneRenderer(
         if (scene.showHeadDot && scene.showMarkers) headBatches.forEach { draw(it, headProj) }
         drawNotifications()
         drawRecordingHud()
+        // The Orbit agent's caption, low in the middle of the view (glasses only: never recorded).
+        dev.avijit.orbit.agent.OrbitAgent.captionArt?.let { headLocked(it, 2, 0f, -0.19f, 0.5f * it.height / it.width, width = 0.5f) }
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
     }
 
@@ -490,7 +660,7 @@ class SceneRenderer(
         }
     }
 
-    private fun drawArtPanel(pose: dev.avijit.orbit.layout.ScreenPose, art: android.graphics.Bitmap, which: Int, alpha: Float = 1f) {
+    private fun drawArtPanel(pose: dev.avijit.orbit.layout.ScreenPose, art: android.graphics.Bitmap, which: Int, alpha: Float = 1f, place: dev.avijit.orbit.record.Placement? = null) {
         if (artTextures[which] == 0) {
             val ids = IntArray(1)
             GLES30.glGenTextures(1, ids, 0)
@@ -505,7 +675,7 @@ class SceneRenderer(
             android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, art, 0)
             artUploaded[which] = art
         }
-        modelFor(pose, 1f)
+        modelFor(pose, place, 1f)
         Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
@@ -578,19 +748,19 @@ class SceneRenderer(
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
     }
 
-    private fun drawPointer(c: ScreenPose, scene: SceneSnapshot) {
+    private fun drawPointer(c: ScreenPose, scene: SceneSnapshot, place: dev.avijit.orbit.record.Placement? = null) {
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA) // Android bitmaps are premultiplied
         // Away from screens the pointer stays full size and gets a soft halo, so it never gets lost in space.
-        modelFor(c, if (scene.cursorOverScreen) 1f else 1.15f)
+        modelFor(c, place, if (scene.cursorOverScreen) 1f else 1.15f)
         Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
         if (!scene.cursorOverScreen) {
             GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-            modelFor(c, 0.75f)
+            modelFor(c, place, 0.75f)
             Matrix.multiplyMM(model2, 0, vp, 0, model, 0)
             drawLine(circle, CIRCLE_SEGMENTS, GLES30.GL_LINE_LOOP, HALO, model2)
-            modelFor(c, 1.15f)
+            modelFor(c, place, 1.15f)
             GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         }
         if (scene.clickAgeMs >= 0) {
@@ -598,7 +768,7 @@ class SceneRenderer(
             val ease = 1f - (1f - t) * (1f - t)
             val ring = floatArrayOf(FOCUS[0], FOCUS[1], FOCUS[2], 1f - t)
             GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-            modelFor(c, 0.25f + ease * 0.9f)
+            modelFor(c, place, 0.25f + ease * 0.9f)
             Matrix.multiplyMM(model2, 0, vp, 0, model, 0)
             drawLine(circle, CIRCLE_SEGMENTS, GLES30.GL_LINE_LOOP, ring, model2)
             GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
@@ -650,6 +820,18 @@ class SceneRenderer(
     private val hintArrow = floats(listOf(0.026f, 0f, 0f, -0.014f, 0.0105f, 0f, -0.014f, -0.0105f, 0f))
 
     /** Column-major model matrix: unit quad → screen of [pose], scaled by [grow]. */
+    private fun modelFor(p: dev.avijit.orbit.record.Placement, grow: Float) {
+        val w = p.w * grow; val h = p.h * grow
+        model[0] = p.r[0] * w; model[1] = p.r[1] * w; model[2] = p.r[2] * w; model[3] = 0f
+        model[4] = p.u[0] * h; model[5] = p.u[1] * h; model[6] = p.u[2] * h; model[7] = 0f
+        model[8] = -p.f[0]; model[9] = -p.f[1]; model[10] = -p.f[2]; model[11] = 0f
+        model[12] = p.c[0]; model[13] = p.c[1]; model[14] = p.c[2]; model[15] = 1f
+    }
+
+    /** [place] when staged for the camera, else where [pose] really is. */
+    private fun modelFor(pose: ScreenPose, place: dev.avijit.orbit.record.Placement?, grow: Float) =
+        if (place != null) modelFor(place, grow) else modelFor(pose, grow)
+
     private fun modelFor(pose: ScreenPose, grow: Float) {
         val (r, u, f) = pose.basis()
         val c = pose.centre()
@@ -805,7 +987,11 @@ class SceneRenderer(
         private val HINT = floatArrayOf(0.49f, 0.96f, 0.84f, 0.8f)
         private const val HINT_DIST_M = 1f
         /** Screens in mixed reality: a touch see-through, like a hologram. */
-        private const val MR_OPACITY = 0.94f
+        private const val MR_OPACITY = 1f
+        /** Framed screen: share of the way to its target each frame (30 fps: settles in about half a second). */
+        const val HERO_EASE = 0.18f
+        /** How strongly staged screens light the room around them. */
+        const val SCREEN_GLOW = 0.45f
 
         val LINE_VS = """
             #version 300 es

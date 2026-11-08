@@ -107,6 +107,8 @@ interface OrbitActions {
     fun setLayout(p: LayoutParams)
     fun openApp(component: String)
     fun openBrowser()
+    /** Camera studio screen in the glasses (recording controls with the live camera picture). */
+    fun openStudio()
     fun reopenLast()
     /** Home/Settings button: Start when paired. */
     fun helperAction()

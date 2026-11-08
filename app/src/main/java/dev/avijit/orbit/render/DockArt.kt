@@ -17,9 +17,11 @@ object DockArt {
     private const val ITEM_W = 240
     private val ITEM_H = (ITEM_W / AppDock.ITEM_ASPECT).toInt()
 
-    fun render(widget: DockWidget?, icons: List<Bitmap?>, labels: List<String>, hover: Int?): Bitmap {
+    /** [allApps]: the dock ends with the Orbit mic (item labels.size) and "All apps" (labels.size + 1). */
+    fun render(widget: DockWidget?, icons: List<Bitmap?>, labels: List<String>, hover: Int?, allApps: Boolean = false): Bitmap {
         val wx = if (widget != null) (ITEM_W * AppDock.WIDGET_SLOTS).toInt() else 0
-        val b = Bitmap.createBitmap((wx + ITEM_W * labels.size).coerceAtLeast(ITEM_W), ITEM_H, Bitmap.Config.ARGB_8888)
+        val items = labels.size + if (allApps) 2 else 0
+        val b = Bitmap.createBitmap((wx + ITEM_W * items).coerceAtLeast(ITEM_W), ITEM_H, Bitmap.Config.ARGB_8888)
         val c = Canvas(b)
         val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(225, 12, 15, 22) }
         c.drawRoundRect(RectF(0f, 0f, b.width.toFloat(), b.height.toFloat()), 44f, 44f, panel)
@@ -37,7 +39,37 @@ object DockArt {
             val name = TextUtils.ellipsize(label, text, ITEM_W - 24f, TextUtils.TruncateAt.END).toString()
             c.drawText(name, x0 + ITEM_W / 2f, top + size + 58f, text)
         }
+        if (allApps) {
+            val size = ITEM_W * 0.56f; val top = ITEM_H * 0.14f
+            listOf("Ask Orbit", "All apps").forEachIndexed { k, name ->
+                val i = labels.size + k
+                val x0 = i * ITEM_W.toFloat()
+                if (hover == i) c.drawRoundRect(RectF(x0 + 10, 10f, x0 + ITEM_W - 10, ITEM_H - 10f), 32f, 32f, hot)
+                val r = RectF(x0 + (ITEM_W - size) / 2, top, x0 + (ITEM_W + size) / 2, top + size)
+                if (k == 0) drawMicIcon(c, r) else drawAllAppsIcon(c, r)
+                c.drawText(name, x0 + ITEM_W / 2f, top + size + 58f, text)
+            }
+        }
         return b
+    }
+
+    /** A round mint orb with a microphone: the Orbit agent. */
+    private fun drawMicIcon(c: Canvas, r: RectF) {
+        c.drawOval(r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(36, 32, 84) })
+        val mint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(125, 245, 214) }
+        val cx = r.centerX(); val w = r.width()
+        c.drawRoundRect(RectF(cx - w * 0.1f, r.top + w * 0.2f, cx + w * 0.1f, r.top + w * 0.56f), w * 0.1f, w * 0.1f, mint)
+        val stroke = Paint(mint).apply { style = Paint.Style.STROKE; strokeWidth = w * 0.05f; strokeCap = Paint.Cap.ROUND }
+        c.drawArc(RectF(cx - w * 0.2f, r.top + w * 0.3f, cx + w * 0.2f, r.top + w * 0.66f), 0f, 180f, false, stroke)
+        c.drawLine(cx, r.top + w * 0.66f, cx, r.top + w * 0.78f, stroke)
+    }
+
+    /** A rounded tile with a 3×3 grid of dots, in the Orbit accent. */
+    private fun drawAllAppsIcon(c: Canvas, r: RectF) {
+        c.drawRoundRect(r, r.width() * 0.26f, r.width() * 0.26f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(36, 32, 84) })
+        val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(124, 156, 255) }
+        val step = r.width() / 4f; val rad = r.width() * 0.075f
+        for (i in 1..3) for (j in 1..3) c.drawCircle(r.left + step * i, r.top + step * j, rad, dot)
     }
 
     private fun drawWidget(c: Canvas, w: DockWidget, width: Int) {

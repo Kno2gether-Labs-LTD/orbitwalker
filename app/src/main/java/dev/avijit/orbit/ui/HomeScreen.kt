@@ -82,6 +82,12 @@ fun HomeScreen(state: UiState, actions: OrbitActions, onAddApp: () -> Unit, onTa
             onClick = { actions.openBrowser() },
         )
         SettingRow(
+            "Orbit agent",
+            if (dev.avijit.orbit.agent.OrbitAgent.paired) "Say \"Hey Orbit\" or click the mic in the dock" else "Talk to your glasses: pair your Orbit Server",
+            trailing = { Icon(OrbitIcons.Globe, null, tint = Orbit.Accent2, modifier = Modifier.size(22.dp)) },
+            onClick = { AgentNav.open.value = true },
+        )
+        SettingRow(
             "Record",
             "Your glasses view and a mixed reality video of you among your screens",
             trailing = { Icon(OrbitIcons.Record, null, tint = Orbit.Accent, modifier = Modifier.size(22.dp)) },

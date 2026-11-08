@@ -12,11 +12,19 @@
     <!-- Recording: the phone camera films you for mixed reality; the microphone records your voice. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Orbit agent: your own Orbit Server, and the "Hey Orbit" model download. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -43,6 +51,13 @@
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
+            <!-- Pairing link from the Orbit Server dashboard (its own scheme, so Orbit Health never takes it). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="orbitwalker" android:host="pair" />
+            </intent-filter>
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/usb_device_filter" />
@@ -63,10 +78,36 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboard|keyboardHidden|navigation"
             android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
 
+        <!-- The camera studio: opened by Orbit as a screen in the glasses (so the helper must be able to start it). -->
+        <activity
+            android:name=".record.StudioActivity"
+            android:exported="true"
+            android:label="Camera studio"
+            android:documentLaunchMode="always"
+            android:autoRemoveFromRecents="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboard|keyboardHidden|navigation" />
+
+        <!-- The app library ("All apps" in the dock): opened by Orbit as a screen in the glasses (the helper starts it). -->
+        <activity
+            android:name=".ui.AppLibraryActivity"
+            android:exported="true"
+            android:label="All apps"
+            android:documentLaunchMode="always"
+            android:autoRemoveFromRecents="true"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboard|keyboardHidden|navigation" />
+
         <service
             android:name=".record.RecordingService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone" />
+
+        <service
+            android:name=".agent.AgentService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <service
             android:name=".mirror.MirrorService"
